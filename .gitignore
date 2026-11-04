@@ -5,3 +5,4 @@ config.local.js
 tests/shots/
 handoff/
 dist/
+apps-script/Secret Token/
