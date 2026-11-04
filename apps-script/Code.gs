@@ -2,9 +2,12 @@
  * Gym Log — Google Apps Script JSON API (Web App)
  * ผูกกับสเปรดชีตของ Boss (container-bound)
  *
- * - แท็บ "Log"  : 1 แถวต่อ 1 เซ็ต (แหล่งข้อมูลจริง)
- * - แท็บ "REF"  : A = ชื่อท่า, B = คำอธิบายท่า, C = kind (strength/cardio) — เพิ่มท่าใหม่ต่อท้ายเท่านั้น
- * - ชีตเก่า '64'–'69' : อ่านอย่างเดียว ใช้หา "ฝึกล่าสุด" (ห้ามเขียน)
+ * สเปรดชีตใหม่ 3 แท็บ (สร้างหัวตารางให้เองถ้ายังไม่มี):
+ * - "Log"       : 1 แถวต่อ 1 เซ็ต (แหล่งข้อมูลจริง)
+ *                UpdatedAt, SessionId, Date, Time, Place, Exercise, Kind, Set, Reps, Weight, Minutes, AvgHR, Note, Distance, Source
+ * - "Exercises" : Exercise, Description, Kind (strength/cardio), Rest — เพิ่มท่าใหม่ต่อท้ายเท่านั้น
+ * - "Places"    : Place, Color, Note — สถานที่ใหม่ถูกเพิ่มต่อท้ายให้อัตโนมัติ
+ * ข้อมูลเก่าจากสเปรดชีตเดิมย้ายด้วย Migrate.gs (รันครั้งเดียว) — ไฟล์เดิมไม่ถูกแตะ
  *
  * Endpoint เดียว: doPost(e)  body = JSON {token, action, args, opId} (ส่งเป็น text/plain)
  * ตอบ {ok:true, data} หรือ {ok:false, error}
@@ -12,10 +15,14 @@
  */
 
 var LOG_SHEET = 'Log';
-var REF_SHEET = 'REF';
-var OLD_SHEETS = ['69', '68', '67', '66', '65', '64'];
-var HEAD = ['UpdatedAt', 'SessionId', 'Date', 'Time', 'Gym', 'Exercise', 'Kind', 'Set', 'Reps', 'Weight', 'Minutes', 'AvgHR', 'Note'];
+var EX_SHEET = 'Exercises';
+var PLACE_SHEET = 'Places';
+var HEAD = ['UpdatedAt', 'SessionId', 'Date', 'Time', 'Place', 'Exercise', 'Kind', 'Set', 'Reps', 'Weight', 'Minutes', 'AvgHR', 'Note', 'Distance', 'Source'];
+var EX_HEAD = ['Exercise', 'Description', 'Kind', 'Rest'];
+var PLACE_HEAD = ['Place', 'Color', 'Note'];
+var PALETTE = ['#C8F169', '#7CC4F5', '#F5B461', '#C9A7F5', '#6FD3C0', '#F5A3C7', '#F28B82'];
 var CARDIO_RE = /treadmill|elliptical|swim|cycl|bike|run|walk|rowing|stair/i;
+var SMALL_RE = /curl|raise|pushdown|push down|extension|fly|crunch|calf|kickback|shrug|face pull|pec deck|rear delt|wrist/i;
 var PAGE_DEFAULT = 10;
 var PAGE_MAX = 50;
 var MAX_SETS = 30;
@@ -57,9 +64,10 @@ var ACTIONS_ = {
   saveExercise: saveExercise,
   deleteExercise: deleteExercise,
   saveMeta: saveMeta,
-  addExercise: addExercise
+  addExercise: addExercise,
+  addPlace: addPlace
 };
-var WRITE_ = { saveExercise: 1, deleteExercise: 1, saveMeta: 1, addExercise: 1 };
+var WRITE_ = { saveExercise: 1, deleteExercise: 1, saveMeta: 1, addExercise: 1, addPlace: 1 };
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -132,16 +140,29 @@ function str_(v, max) {
   return String(v === null || v === undefined ? '' : v).slice(0, max || 200);
 }
 
-function logSheet_() {
+// หาแท็บ ถ้าไม่มีสร้างพร้อมหัวตาราง (ไม่แตะแท็บที่มีอยู่แล้ว)
+function ensureSheet_(name, head, textCols) {
   var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName(LOG_SHEET);
+  var sh = ss.getSheetByName(name);
   if (!sh) {
-    sh = ss.insertSheet(LOG_SHEET);
-    sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]);
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, head.length).setValues([head]);
     sh.setFrozenRows(1);
-    sh.getRange('C:D').setNumberFormat('@'); // วันที่/เวลาเป็นข้อความ กันชีตแปลงเอง
+    (textCols || []).forEach(function (c) {
+      sh.getRange(c).setNumberFormat('@');
+    });
   }
   return sh;
+}
+
+function logSheet_() {
+  return ensureSheet_(LOG_SHEET, HEAD, ['B:G', 'M:M', 'O:O']); // ข้อความล้วน กันชีตแปลงวันที่/สูตรเอง
+}
+function exSheet_() {
+  return ensureSheet_(EX_SHEET, EX_HEAD, ['A:D']);
+}
+function placeSheet_() {
+  return ensureSheet_(PLACE_SHEET, PLACE_HEAD, ['A:C']);
 }
 
 function readLog_() {
@@ -161,7 +182,9 @@ function readLog_() {
       w: num_(r[9]),
       min: num_(r[10]),
       hr: num_(r[11]),
-      note: String(r[12] || '')
+      note: String(r[12] || ''),
+      dist: num_(r[13]),
+      src: String(r[14] || '')
     };
   });
 }
@@ -182,16 +205,21 @@ function cleanMeta_(m) {
 function textFormat_(sh, row, count) {
   sh.getRange(row, 2, count, 6).setNumberFormat('@'); // SessionId..Kind
   sh.getRange(row, 13, count, 1).setNumberFormat('@'); // Note
+  sh.getRange(row, 15, count, 1).setNumberFormat('@'); // Source
 }
 
 /* ---------- รายชื่อท่า ---------- */
 
+function defaultRest_(name, kind) {
+  if (kind === 'cardio') return '';
+  return SMALL_RE.test(name) ? '60–90 วินาที' : '~2 นาที';
+}
+
 function readExercises_(usage) {
-  var sh = SpreadsheetApp.getActive().getSheetByName(REF_SHEET);
-  if (!sh) return [];
+  var sh = exSheet_();
   var n = sh.getLastRow();
-  if (!n) return [];
-  var v = sh.getRange(1, 1, n, 3).getValues();
+  if (n < 2) return [];
+  var v = sh.getRange(2, 1, n - 1, 4).getValues(); // ข้ามแถวหัวตาราง
   var seen = {};
   var out = [];
   v.forEach(function (r) {
@@ -202,7 +230,7 @@ function readExercises_(usage) {
     seen[k] = 1;
     var c = String(r[2] || '').toLowerCase();
     var kind = c === 'cardio' ? 'cardio' : c === 'strength' ? 'strength' : CARDIO_RE.test(nm) ? 'cardio' : 'strength';
-    out.push({ name: nm, desc: String(r[1] || '').trim(), kind: kind, n: usage[k] || 0 });
+    out.push({ name: nm, desc: String(r[1] || '').trim(), kind: kind, rest: String(r[3] || '').trim(), n: usage[k] || 0 });
   });
   out.sort(function (a, b) {
     return b.n - a.n || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
@@ -210,23 +238,51 @@ function readExercises_(usage) {
   return out;
 }
 
-// เพิ่มท่าใหม่ต่อท้าย REF เท่านั้น (ไม่แก้/ลบแถวเดิม)
+// เพิ่มท่าใหม่ต่อท้าย Exercises เท่านั้น (ไม่แก้/ลบแถวเดิม)
 function addExercise(name, kind) {
   name = str_(name, 80).trim();
   if (!name) return { ok: false };
-  var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName(REF_SHEET) || ss.insertSheet(REF_SHEET);
+  kind = kind === 'cardio' ? 'cardio' : 'strength';
+  var sh = exSheet_();
   var n = sh.getLastRow();
-  if (n) {
-    var names = sh.getRange(1, 1, n, 1).getValues();
+  if (n > 1) {
+    var names = sh.getRange(2, 1, n - 1, 1).getValues();
     for (var i = 0; i < names.length; i++) {
       if (String(names[i][0]).trim().toLowerCase() === name.toLowerCase()) return { ok: true, existed: true };
     }
   }
-  var row = sh.getRange(n + 1, 1, 1, 3);
+  var row = sh.getRange(n + 1, 1, 1, 4);
   row.setNumberFormat('@');
-  row.setValues([[name, '', kind === 'cardio' ? 'cardio' : 'strength']]);
+  row.setValues([[name, '', kind, defaultRest_(name, kind)]]);
   return { ok: true };
+}
+
+/* ---------- สถานที่ ---------- */
+
+function readPlaces_() {
+  var sh = placeSheet_();
+  var n = sh.getLastRow();
+  if (n < 2) return [];
+  return sh.getRange(2, 1, n - 1, 3).getValues().map(function (r) {
+    return { name: String(r[0]).trim(), color: String(r[1] || '').trim(), note: String(r[2] || '') };
+  }).filter(function (p) { return p.name; });
+}
+
+// เพิ่มสถานที่ต่อท้าย Places ถ้ายังไม่มี (สีใช้ตัวแรกในชุดที่ยังไม่ถูกใช้)
+function addPlace(name) {
+  name = str_(name, 60).trim();
+  if (!name) return { ok: false };
+  var places = readPlaces_();
+  for (var i = 0; i < places.length; i++) {
+    if (places[i].name.toLowerCase() === name.toLowerCase()) return { ok: true, existed: true, color: places[i].color };
+  }
+  var used = places.map(function (p) { return p.color; });
+  var color = PALETTE.filter(function (c) { return used.indexOf(c) < 0; })[0] || PALETTE[places.length % PALETTE.length];
+  var sh = placeSheet_();
+  var row = sh.getRange(sh.getLastRow() + 1, 1, 1, 3);
+  row.setNumberFormat('@');
+  row.setValues([[name, color, '']]);
+  return { ok: true, color: color };
 }
 
 /* ---------- รวมแถว Log เป็นเซสชัน ---------- */
@@ -283,6 +339,24 @@ function buildSessions_(rows) {
   return { list: list, usage: usage, gyms: gyms };
 }
 
+// รวมสถานที่จากแท็บ Places (แม้ยังไม่เคยใช้) กับที่พบใน Log พร้อมจำนวนครั้งและสี
+function mergeGyms_(counted) {
+  var byName = {};
+  var out = [];
+  readPlaces_().forEach(function (p) {
+    var o = { name: p.name, n: 0, color: p.color };
+    byName[p.name] = o;
+    out.push(o);
+  });
+  counted.forEach(function (g) {
+    if (byName[g.name]) byName[g.name].n = g.n;
+    else out.push({ name: g.name, n: g.n, color: '' });
+  });
+  return out.sort(function (a, b) {
+    return b.n - a.n || (a.name < b.name ? -1 : 1);
+  });
+}
+
 function pickSessions_(list, offset, limit) {
   return list.slice(offset, offset + limit).map(function (s) {
     return { id: s.id, date: s.date, time: s.time, gym: s.gym, items: s.items };
@@ -304,7 +378,7 @@ function bootstrap() {
   var gid = sh.getSheetId();
   return {
     exercises: readExercises_(b.usage),
-    gyms: b.gyms,
+    gyms: mergeGyms_(b.gyms),
     lastGym: b.list.length ? b.list[0].gym : '',
     sheetUrl: url,
     gid: gid,
@@ -344,43 +418,6 @@ function last(name, excludeId) {
       });
     return { date: best.date, sets: sets };
   }
-  return oldLast_(key);
-}
-
-// ชีตเก่า (อ่านอย่างเดียว): แถวชื่อท่า = จำนวนครั้ง (D:I), แถวถัดไป = น้ำหนัก, วันที่อยู่คอลัมน์ A ของแถวบน ๆ
-function oldLast_(key) {
-  var ss = SpreadsheetApp.getActive();
-  for (var s = 0; s < OLD_SHEETS.length; s++) {
-    var sh = ss.getSheetByName(OLD_SHEETS[s]);
-    if (!sh) continue;
-    var n = sh.getLastRow();
-    if (n < 2) continue;
-    var v = sh.getRange(1, 1, n, 9).getValues();
-    for (var i = n - 2; i >= 0; i--) {
-      if (String(v[i][1]).trim().toLowerCase() !== key) continue;
-      var reps = v[i].slice(3, 9);
-      var wts = v[i + 1].slice(3, 9);
-      var sets = [];
-      var prev = '';
-      for (var k = 0; k < 6; k++) {
-        var r = num_(reps[k]);
-        if (r === '') continue;
-        var w = num_(wts[k]);
-        if (w === '') w = prev;
-        prev = w;
-        sets.push({ r: r, w: w });
-      }
-      if (!sets.length) continue;
-      var date = '';
-      for (var j = i; j >= 0; j--) {
-        if (v[j][0] !== '' && v[j][0] !== null) {
-          date = ds_(v[j][0]);
-          break;
-        }
-      }
-      return { date: date, sets: sets };
-    }
-  }
   return null;
 }
 
@@ -415,7 +452,7 @@ function buildRows_(meta, ex) {
   var kind = ex.kind === 'cardio' ? 'cardio' : 'strength';
   var note = str_(ex.note, 2000);
   function base(set, reps, w, min, hr) {
-    return [now, meta.id, meta.date, meta.time, meta.gym, name, kind, set, reps, w, min, hr, note];
+    return [now, meta.id, meta.date, meta.time, meta.gym, name, kind, set, reps, w, min, hr, note, '', ''];
   }
   if (kind === 'cardio') {
     var m = num_(ex.min);
@@ -445,6 +482,7 @@ function saveExercise(meta, ex) {
     var start = sh.getLastRow() + 1;
     textFormat_(sh, start, rows.length);
     sh.getRange(start, 1, rows.length, HEAD.length).setValues(rows);
+    if (meta.gym) addPlace(meta.gym);
   }
   return { ok: true, rows: rows.length };
 }
@@ -460,7 +498,7 @@ function saveMeta(meta) {
   var sh = logSheet_();
   var n = sh.getLastRow();
   if (n < 2) return { ok: true, rows: 0 };
-  var rng = sh.getRange(2, 2, n - 1, 4); // B..E = SessionId, Date, Time, Gym
+  var rng = sh.getRange(2, 2, n - 1, 4); // B..E = SessionId, Date, Time, Place
   var v = rng.getValues();
   var hit = 0;
   for (var i = 0; i < v.length; i++) {
@@ -474,6 +512,7 @@ function saveMeta(meta) {
   if (hit) {
     rng.setNumberFormat('@');
     rng.setValues(v);
+    if (meta.gym) addPlace(meta.gym);
   }
   return { ok: true, rows: hit };
 }

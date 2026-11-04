@@ -5,7 +5,7 @@
 
 ```
 เบราว์เซอร์ (GitHub Pages)  ──POST text/plain {token, action, args}──▶  Apps Script Web App  ──▶  Google Sheet
-        ▲  คิวออฟไลน์ + บันทึกอัตโนมัติ                                  ตรวจ token ก่อนทุกอย่าง      Log / REF / '64'–'69'
+        ▲  คิวออฟไลน์ + บันทึกอัตโนมัติ                                  ตรวจ token ก่อนทุกอย่าง      Log / Exercises / Places
 ```
 
 ## โครงสร้าง repo
@@ -13,28 +13,30 @@
 ```
 index.html  config.js  manifest.webmanifest  sw.js
 css/app.css   js/*.js (ES modules)   icons/
-apps-script/Code.gs  apps-script/appsscript.json
+apps-script/Code.gs  apps-script/Migrate.gs  apps-script/appsscript.json
 tests/server  tests/client   tools/ (สร้างไอคอน, เทียบหน้าจอ, smoke test)
 ```
 
-## ข้อมูลในชีต (ไม่แตะของเดิม)
+## ข้อมูลในชีต (ไฟล์ใหม่ 3 แท็บ — ไฟล์เก่าเก็บเป็น backup ไม่ถูกแตะ)
 
-| แท็บ | หน้าที่ | แอปทำอะไรกับมัน |
+| แท็บ | คอลัมน์ | แอปทำอะไรกับมัน |
 |---|---|---|
-| `Log` | 1 แถวต่อ 1 เซ็ต: `UpdatedAt, SessionId, Date, Time, Gym, Exercise, Kind, Set, Reps, Weight, Minutes, AvgHR, Note` | อ่าน/เขียน (สร้างให้เองถ้ายังไม่มี) |
-| `REF` | A = ชื่อท่า, B = คำอธิบายท่า, C = `strength`/`cardio` | อ่าน และ **เพิ่มท่าใหม่ต่อท้ายเท่านั้น** |
-| `'64'`–`'69'` | ชีตเก่า | **อ่านอย่างเดียว** (ใช้หา "ฝึกล่าสุด" ถ้า Log ยังไม่มีท่านั้น) |
+| `Log` | 1 แถวต่อ 1 เซ็ต: `UpdatedAt, SessionId, Date, Time, Place, Exercise, Kind, Set, Reps, Weight, Minutes, AvgHR, Note, Distance, Source` | อ่าน/เขียน. `Distance` เก็บระยะทางที่ย้ายมาจากชีตเก่า (แอปยังไม่แสดง), `Source` = ชื่อชีตเก่าที่ข้อมูลย้ายมา (แถวที่แอปบันทึกเองจะว่าง) |
+| `Exercises` | `Exercise, Description, Kind (strength/cardio), Rest` | อ่าน และ **เพิ่มท่าใหม่ต่อท้ายเท่านั้น**. `Rest` เช่น `~2 นาที` ถ้าเว้นว่างแอปใช้กฎตามชื่อท่าแทน |
+| `Places` | `Place, Color, Note` | อ่าน และเพิ่มสถานที่ใหม่ต่อท้ายให้อัตโนมัติ (สีป้ายเหมือนกันทุกเครื่อง); จำนวนครั้งที่ไปคำนวณจาก `Log` |
 
-วันที่เก็บเป็น ISO ค.ศ. (`2026-11-03`) แต่แสดงและแก้ไขเป็น `dd-MM-yyyy` ปี พ.ศ. (`03-11-2569`)
+แท็บทั้งสามสร้างหัวตารางให้เองถ้ายังไม่มี วันที่เก็บเป็น ISO ค.ศ. (`2026-11-03`) แต่แสดงและแก้ไขเป็น `dd-MM-yyyy` ปี พ.ศ. (`03-11-2569`)
 
 ---
 
 ## ขั้นตอนติดตั้ง
 
-### 1) ตั้งค่า Apps Script (ครั้งเดียว)
+### 1) สร้างสเปรดชีตใหม่ + ตั้งค่า Apps Script (ครั้งเดียว)
 
-1. เปิด Google Sheet ของคุณ → เมนู **ส่วนขยาย (Extensions) → Apps Script**
-2. ลบโค้ดเดิมในไฟล์ `Code.gs` แล้ววางเนื้อหาจาก [`apps-script/Code.gs`](apps-script/Code.gs) ทั้งไฟล์
+1. สร้าง Google Sheet **ใหม่เปล่า ๆ** (ชื่อเช่น "Gym Log"; ไฟล์เก่า "WORKOUT RECORD" ปล่อยไว้เป็น backup ห้ามลบ) แล้วตั้งเขตเวลาเป็น **Asia/Bangkok** (ไฟล์ → การตั้งค่า)
+2. เมนู **ส่วนขยาย (Extensions) → Apps Script** ลบโค้ดเดิม แล้วสร้างไฟล์ 2 ไฟล์:
+   - `Code.gs` ← วางเนื้อหาจาก [`apps-script/Code.gs`](apps-script/Code.gs)
+   - `Migrate.gs` ← วางเนื้อหาจาก [`apps-script/Migrate.gs`](apps-script/Migrate.gs) (ใช้ย้ายข้อมูลเก่าครั้งเดียว ใช้เสร็จลบทิ้งได้)
 3. (แนะนำ) ที่ **Project Settings** ติ๊ก *Show "appsscript.json" manifest file in editor* แล้วแทนที่เนื้อหาด้วย [`apps-script/appsscript.json`](apps-script/appsscript.json)
 4. **สร้าง token** (สุ่มยาว ๆ) — รันในเครื่องคุณ:
    ```bash
@@ -54,7 +56,18 @@ tests/server  tests/client   tools/ (สร้างไอคอน, เที�
 
 > **ทุกครั้งที่แก้ `Code.gs`** ต้อง Deploy → *Manage deployments* → ✏️ → Version: *New version* → Deploy (URL เดิมไม่เปลี่ยน) ไม่งั้นเว็บจะยังเรียกโค้ดเวอร์ชันเก่า
 
-### 2) ขึ้น GitHub Pages
+### 2) ย้ายข้อมูลจากไฟล์เก่า (ครั้งเดียว — ไฟล์เก่าถูก "อ่านอย่างเดียว")
+
+1. เปิดไฟล์เก่า "WORKOUT RECORD" แล้วคัดลอก **ID** จาก URL (ข้อความระหว่าง `/d/` กับ `/edit`)
+2. ที่ Apps Script ของไฟล์ใหม่: **Project Settings → Script Properties** เพิ่ม `OLD_BOOK_ID` = ID นั้น (ไม่ฝัง ID ไว้ในโค้ด)
+3. เลือกฟังก์ชัน `migrateDryRun` → **Run** (ครั้งแรก Google จะขออนุญาตเข้าถึงสเปรดชีต) → ดู **Execution log** ว่าจำนวนเซสชัน/แถวและคำเตือนสมเหตุสมผล (ยังไม่เขียนข้อมูลใด ๆ)
+4. เลือก `migrateAll` → **Run** → ได้แท็บ `Log` (ข้อมูลเก่าทั้งหมด), `Exercises` (ท่า + คำอธิบายจาก REF เดิม + เวลาพัก; ท่าที่อยู่ในประวัติแต่ไม่มีใน REF จะถูกเติมต่อท้าย) และ `Places` (ว่าง)
+5. ตรวจดู: ข้อมูลเก่าแต่ละวัน = 1 เซสชัน, ไม่ระบุสถานที่/เวลา, คอลัมน์ `Source` บอกว่ามาจากชีตไหน (`64`–`69`)
+   - รัน `migrateAll` ซ้ำได้ ไม่ซ้ำข้อมูล (ข้ามชีตที่ย้ายแล้ว)
+   - ถ้าผลไม่ถูกใจ รัน `clearMigrated` (ลบเฉพาะแถวที่ `Source` ไม่ว่าง — แถวที่แอปบันทึกเองไม่ถูกแตะ) แล้วย้ายใหม่
+   - ท่าที่ถูกเติมให้อัตโนมัติจะไม่มีคำอธิบาย ใส่เองที่คอลัมน์ `Description` ได้
+
+### 3) ขึ้น GitHub Pages
 
 1. สร้าง repo ชื่อ `gym-log` (**public** — บัญชีฟรีต้องเป็น public; โค้ดไม่มี secret จึงปลอดภัย)
 2. อัปโหลดไฟล์ในโฟลเดอร์นี้ (ไม่ต้องอัปโหลด `node_modules/`, `tests/shots/`, `handoff/`):
@@ -67,7 +80,7 @@ tests/server  tests/client   tools/ (สร้างไอคอน, เที�
 3. ที่ repo: **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` / folder: `/ (root)`** → Save
 4. รอ 1–2 นาที จะได้ `https://<ชื่อผู้ใช้>.github.io/gym-log/`
 
-### 3) เชื่อมแอปเข้ากับชีต
+### 4) เชื่อมแอปเข้ากับชีต
 
 เปิดแอปบนมือถือ → จะเข้าหน้า **ตั้งค่าการเชื่อมต่อ** อัตโนมัติ
 
@@ -77,7 +90,7 @@ tests/server  tests/client   tools/ (สร้างไอคอน, เที�
 
 ตั้งค่าใหม่ภายหลังได้จากลิงก์ "ตั้งค่าการเชื่อมต่อ" ท้ายหน้าแรก
 
-### 4) เพิ่มไปหน้าจอโฮม
+### 5) เพิ่มไปหน้าจอโฮม
 
 - **iPhone (Safari):** ปุ่มแชร์ → *เพิ่มไปยังหน้าจอโฮม*
 - **Android (Chrome):** เมนู ⋮ → *ติดตั้งแอป* / *เพิ่มไปยังหน้าจอหลัก*
@@ -130,9 +143,9 @@ service worker เสิร์ฟจากแคชก่อนแล้วอ�
 | ทดสอบแล้วขึ้น "token ไม่ถูกต้อง" | token ในแอปไม่ตรงกับ Script Property `API_TOKEN` (ระวังช่องว่างหน้า/หลัง) |
 | "เซิร์ฟเวอร์ตอบรูปแบบไม่ถูกต้อง" | deploy ไม่ได้ตั้ง *Anyone*, URL ไม่ลงท้าย `/exec`, หรือยังไม่ได้ New version หลังแก้โค้ด |
 | "ติดต่อเซิร์ฟเวอร์ไม่ได้" | ไม่มีอินเทอร์เน็ต หรือ URL ผิด |
-| ท่าใหม่ไม่มีคำอธิบาย | ใส่คำอธิบายเองที่คอลัมน์ B ของแท็บ `REF` (แอปจะไม่เขียนคอลัมน์ B ให้) |
+| ท่าใหม่ไม่มีคำอธิบาย | ใส่คำอธิบายเองที่คอลัมน์ Description ของแท็บ `Exercises` (แอปจะไม่เขียนคอลัมน์ B ให้) |
 
 ## ขั้นถัดไป (ยังไม่ทำ)
 
 - แท็บ `View` ที่สคริปต์สร้างให้อัตโนมัติจาก `Log` เป็นหน้าตา 2 แถวต่อท่า (Reps บน / kg ล่าง) สำหรับอ่านด้วยตา — `Log` ยังเป็นแหล่งข้อมูลจริง
-- ย้ายข้อมูลจากชีตเก่า '64'–'69' เข้า `Log` (ตอนนี้อ่านเฉพาะ "ฝึกล่าสุด")
+- ช่องกรอกระยะทางในหน้าคาร์ดิโอ (ตอนนี้คอลัมน์ `Distance` เก็บเฉพาะค่าที่ย้ายมา)

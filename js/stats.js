@@ -4,7 +4,8 @@ import { isoToBE } from './date.js';
 
 const SMALL_RE = /curl|raise|pushdown|push down|extension|fly|crunch|calf|kickback|shrug|face pull|pec deck|rear delt|wrist/i;
 
-export const restText = (name) => 'พักระหว่างเซ็ต ' + (SMALL_RE.test(name) ? '60–90 วินาที' : '~2 นาที');
+// เวลาพักจากแท็บ Exercises (คอลัมน์ Rest) ถ้าว่างใช้กฎตามชื่อท่า
+export const restText = (name, rest) => 'พักระหว่างเซ็ต ' + (rest || (SMALL_RE.test(name) ? '60–90 วินาที' : '~2 นาที'));
 
 export const setFilled = (s) => !empty(s && s.r);
 

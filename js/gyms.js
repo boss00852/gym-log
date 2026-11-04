@@ -3,9 +3,11 @@ const PALETTE = ['#C8F169', '#7CC4F5', '#F5B461', '#C9A7F5', '#6FD3C0', '#F5A3C7
 
 export function gymColor(app, name) {
   if (!name) return '#9CA6B2';
+  const fromSheet = app.data.gyms.find((g) => g.name === name);
+  if (fromSheet && fromSheet.color) return fromSheet.color; // สีจากแท็บ Places (เหมือนกันทุกเครื่อง)
   const map = app.storage.get('gl_gymcolors', {});
   if (map[name]) return map[name];
-  const used = Object.values(map);
+  const used = Object.values(map).concat(app.data.gyms.map((g) => g.color).filter(Boolean));
   const next = PALETTE.find((c) => !used.includes(c)) || PALETTE[Object.keys(map).length % PALETTE.length];
   map[name] = next;
   app.storage.set('gl_gymcolors', map);

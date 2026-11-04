@@ -16,7 +16,8 @@ const TOKEN = 'shot-token';
 /* ---------- ข้อมูลจำลองให้ตรงกับดีไซน์ ---------- */
 function makeEnv() {
   const env = createEnv({ token: TOKEN });
-  env.addSheet('REF', [
+  env.addSheet('Exercises', [
+    ['Exercise', 'Description', 'Kind', 'Rest'],
     ['Inclined bench press', 'ดันบาร์หรือดัมเบลบนม้านั่งเอียง เน้นอกส่วนบน ไหล่หน้า และไตรเซ็ป', 'strength'],
     ['Seated cable row with close-grip neutral handle', 'นั่งดึงสายเคเบิลเข้าหาลำตัว เน้นหลังส่วนกลางและสะบัก', 'strength'],
     ['Lateral raise', 'ยกแขนออกด้านข้าง เน้นไหล่ด้านข้าง ทำให้ไหล่ดูกว้างขึ้น', 'strength'],

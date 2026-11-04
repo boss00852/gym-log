@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CODE = fs.readFileSync(path.join(here, '../../apps-script/Code.gs'), 'utf8');
+const MIGRATE = fs.readFileSync(path.join(here, '../../apps-script/Migrate.gs'), 'utf8');
 
 function colToNum(s) {
   let n = 0;
@@ -88,6 +89,7 @@ export class MockSheet {
 
 export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) {
   const sheets = {};
+  const books = {}; // สเปรดชีตอื่น (ไฟล์เก่า) สำหรับ openById
   let nextId = 100;
   const props = { API_TOKEN: token };
   const cache = {};
@@ -103,7 +105,8 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
     Date,
     JSON,
     Math,
-    SpreadsheetApp: { getActive: () => ss },
+    SpreadsheetApp: { getActive: () => ss, openById: (id) => { if (!books[id]) throw new Error('no book ' + id); return books[id].ss; } },
+    Logger: { log() {} },
     Utilities: {
       formatDate(d, zone, pattern) {
         // รองรับเฉพาะ pattern ที่ใช้ใน Code.gs
@@ -134,9 +137,25 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   };
   vm.createContext(ctx);
   vm.runInContext(CODE, ctx, { filename: 'Code.gs' });
+  vm.runInContext(MIGRATE, ctx, { filename: 'Migrate.gs' });
 
   const env = {
-    ctx, sheets, props, cache,
+    ctx, sheets, props, cache, books,
+    // สร้างสเปรดชีตอื่น (เช่นไฟล์เก่า) พร้อมเก็บบันทึกการเขียนของทุกชีตในนั้น
+    addBook(id) {
+      const bs = {};
+      let bid = 900;
+      const bss = { getSheetByName: (n) => bs[n] || null, insertSheet: (n) => (bs[n] = new MockSheet(n, bid++)), getSpreadsheetTimeZone: () => tz, getUrl: () => 'https://old/' + id };
+      books[id] = { ss: bss, sheets: bs };
+      return {
+        sheets: bs,
+        addSheet(name, rows = []) {
+          const sh = (bs[name] = new MockSheet(name, bid++));
+          rows.forEach((r, i) => r.forEach((v, j) => sh._set(i, j, v)));
+          return sh;
+        }
+      };
+    },
     addSheet(name, rows = []) {
       const sh = (sheets[name] = new MockSheet(name, nextId++));
       rows.forEach((r, i) => r.forEach((v, j) => sh._set(i, j, v)));

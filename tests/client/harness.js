@@ -8,10 +8,12 @@ import { createStorage } from '../../js/store.js';
 export const TOKEN = 'secret-token';
 
 export function seedServer(env, n = 0) {
-  env.addSheet('REF', [
-    ['Bench press', 'ท่าอกพื้นฐาน', 'strength'],
-    ['Lateral raise', 'ยกแขนออกด้านข้าง', 'strength'],
-    ['Treadmill', 'เดินวิ่งบนสายพาน', 'cardio']
+  env.addSheet('Exercises', [
+    ['Exercise', 'Description', 'Kind', 'Rest'],
+    ['Bench press', 'ท่าอกพื้นฐาน', 'strength', ''],
+    ['Lateral raise', 'ยกแขนออกด้านข้าง', 'strength', ''],
+    ['Cable fly', 'หุบสายเคเบิล', 'strength', '90 วินาที'],
+    ['Treadmill', 'เดินวิ่งบนสายพาน', 'cardio', '']
   ]);
   for (let i = 1; i <= n; i++) {
     const d = `2026-10-${String(i).padStart(2, '0')}`;

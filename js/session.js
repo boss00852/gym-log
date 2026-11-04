@@ -5,10 +5,8 @@ import { hasData, lastText, restText, summary, deltaText, dropFlags, autoWeight,
 import { openMetaSheet, openAddSheet } from './sheets.js';
 import { fmtHMS } from './timer.js';
 
-const descOf = (app, name) => {
-  const e = app.data.exercises.find((x) => x.name.toLowerCase() === name.toLowerCase());
-  return e ? e.desc || '' : '';
-};
+const exInfo = (app, name) => app.data.exercises.find((x) => x.name.toLowerCase() === name.toLowerCase()) || {};
+const descOf = (app, name) => exInfo(app, name).desc || '';
 
 export function newItem(name, kind) {
   return { name, kind, sets: kind === 'cardio' ? [] : [0, 1, 2, 3].map(() => ({ r: '', w: '' })), min: '', hr: '', note: '' };
@@ -59,7 +57,7 @@ function exCard(app, it) {
     h('div', {}, [
       h('div', { class: 'nm', text: it.name }),
       it.kind === 'cardio' ? null : lastEl,
-      it.kind === 'cardio' ? null : h('div', { class: 'rest', text: restText(it.name) })
+      it.kind === 'cardio' ? null : h('div', { class: 'rest', text: restText(it.name, exInfo(app, it.name).rest) })
     ]),
     delBtn(app, it, card)
   ]));

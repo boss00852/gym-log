@@ -6,6 +6,7 @@ test.afterEach(() => closeAll());
 import { isoToBE, parseBE, parseTime } from '../../js/date.js';
 import { summary, deltaText, dropFlags, lastText } from '../../js/stats.js';
 import { fmtHMS } from '../../js/timer.js';
+import { gymColor } from '../../js/gyms.js';
 
 const idle = (t) => t.$('[data-badge].st-idle') && t.app.q.length === 0;
 
@@ -95,6 +96,34 @@ test('หน้าแรก: แสดงทุกท่าไม่ยุบ + 
   assert.equal(card.querySelectorAll('.mini')[6].querySelector('.v').textContent, '30 นาที · HR 130');
   const c1 = card.querySelector('.gy').style.color, c2 = t.$$('.sc')[1].querySelector('.gy').style.color;
   assert.notEqual(c1, c2);
+});
+
+/* ---------- เวลาพัก / สถานที่จากชีต ---------- */
+test('เวลาพักอ่านจากคอลัมน์ Rest ของ Exercises (ว่าง = ใช้กฎตามชื่อท่า)', async () => {
+  const t = setup();
+  await boot(t);
+  t.click(t.$('.cta'));
+  await addExerciseUI(t, 'Cable fly'); // ชีตกำหนด 90 วินาที (กฎชื่อจะให้ 60–90)
+  assert.equal(t.$('.rest').textContent, 'พักระหว่างเซ็ต 90 วินาที');
+  await addExerciseUI(t, 'Bench press'); // ว่าง → กฎเดิม
+  assert.equal(t.$$('.rest')[1].textContent, 'พักระหว่างเซ็ต ~2 นาที');
+});
+
+test('สถานที่ใหม่ถูกบันทึกลง Places พร้อมสี และแอปใช้สีจากชีต', async () => {
+  const t = setup({ seed: 1 });
+  await boot(t);
+  t.click(t.$('.cta'));
+  await addExerciseUI(t, 'Bench press');
+  t.click(t.$('[data-chip="gym"]'));
+  t.click(t.$('#f-gym'));
+  t.type(t.$('#gymq'), 'ยิม Z');
+  t.click(t.$('#newgym'));
+  t.type(t.$('[data-r]'), '10');
+  await waitFor(() => t.env.sheets.Places && t.env.sheets.Places.grid.some((r) => r[0] === 'ยิม Z'));
+  const row = t.env.sheets.Places.grid.find((r) => r[0] === 'ยิม Z');
+  assert.match(row[1], /^#[0-9A-F]{6}$/i);
+  t.app.data.gyms = [{ name: 'ยิม Z', n: 1, color: '#123456' }];
+  assert.equal(gymColor(t.app, 'ยิม Z'), '#123456', 'สีจากชีต (Places) ชนะค่าที่เดาในเครื่อง');
 });
 
 /* ---------- เพิ่มท่า / autosave ---------- */
@@ -198,15 +227,15 @@ test('ไฮไลต์น้ำหนักลด (.d) + สรุปสด (+
   assert.ok(t.$('.sum b').classList.contains('neg'));
 });
 
-test('ท่าใหม่: สร้างแล้วต่อท้าย REF (เฉพาะแถวใหม่) และใช้ได้ทันที', async () => {
+test('ท่าใหม่: สร้างแล้วต่อท้าย Exercises (เฉพาะแถวใหม่) และใช้ได้ทันที', async () => {
   const t = setup();
   await boot(t);
   t.click(t.$('.cta'));
   await addExerciseUI(t, 'Pec deck fly');
   assert.equal(t.$('.nm').textContent, 'Pec deck fly');
-  await waitFor(() => t.env.sheets.REF.grid.some((r) => r[0] === 'Pec deck fly'));
-  assert.deepEqual(t.env.sheets.REF.grid[3], ['Pec deck fly', '', 'strength']);
-  assert.equal(t.env.sheets.REF.grid.length, 4);
+  await waitFor(() => t.env.sheets.Exercises.grid.some((r) => r[0] === 'Pec deck fly'));
+  assert.deepEqual(t.env.sheets.Exercises.grid[5], ['Pec deck fly', '', 'strength', '60–90 วินาที']);
+  assert.equal(t.env.sheets.Exercises.grid.length, 6);
 });
 
 test('คาร์ดิโอ: ไม่มี dock จับเวลา, บันทึกนาที/HR, เพิ่มเวทแล้ว dock กลับมา', async () => {

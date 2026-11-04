@@ -2,17 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEnv } from './mock.js';
 
-const HEAD = ['UpdatedAt', 'SessionId', 'Date', 'Time', 'Gym', 'Exercise', 'Kind', 'Set', 'Reps', 'Weight', 'Minutes', 'AvgHR', 'Note'];
+const HEAD = ['UpdatedAt', 'SessionId', 'Date', 'Time', 'Place', 'Exercise', 'Kind', 'Set', 'Reps', 'Weight', 'Minutes', 'AvgHR', 'Note', 'Distance', 'Source'];
 const meta = (o = {}) => ({ id: 's1', date: '2026-11-03', time: '17:17', gym: 'ยิมหลัก', ...o });
 const ex = (o = {}) => ({ name: 'Bench press', kind: 'strength', sets: [{ r: 12, w: 40 }, { r: 10, w: 40 }], note: '', ...o });
 
 function fresh() {
   const env = createEnv();
-  env.addSheet('REF', [
-    ['Bench press', 'ท่าอกพื้นฐาน', 'strength'],
-    ['Lat pulldown', 'ดึงลง', 'strength'],
-    ['Treadmill', 'เดินวิ่ง', 'cardio'],
-    ['-', '', '']
+  env.addSheet('Exercises', [
+    ['Exercise', 'Description', 'Kind', 'Rest'],
+    ['Bench press', 'ท่าอกพื้นฐาน', 'strength', '~2 นาที'],
+    ['Lat pulldown', 'ดึงลง', 'strength', ''],
+    ['Treadmill', 'เดินวิ่ง', 'cardio', ''],
+    ['-', '', '', '']
   ]);
   return env;
 }
@@ -50,7 +51,7 @@ test('saveExercise: 1 แถวต่อเซ็ต + สร้าง Log พ�
   const g = env.sheets.Log.grid;
   assert.deepEqual(g[0], HEAD);
   assert.equal(g.length, 3);
-  assert.deepEqual(g[1].slice(1), ['s1', '2026-11-03', '17:17', 'ยิมหลัก', 'Bench press', 'strength', 1, 12, 40, '', '', '']);
+  assert.deepEqual(g[1].slice(1), ['s1', '2026-11-03', '17:17', 'ยิมหลัก', 'Bench press', 'strength', 1, 12, 40, '', '', '', '', '']);
   assert.equal(g[2][7], 2);
 });
 
@@ -135,17 +136,50 @@ test('saveMeta: อัปเดตทุกแถวของเซสชัน 
   rows.filter((x) => x[1] === 's2').forEach((x) => assert.deepEqual([x[2], x[4]], ['2026-10-30', 'ยิมหลัก']));
 });
 
-test('addExercise: ต่อท้าย REF เท่านั้น ไม่ซ้ำ ไม่แก้แถวเดิม', () => {
+test('addExercise: ต่อท้าย Exercises เท่านั้น ไม่ซ้ำ ไม่แก้แถวเดิม + เติมเวลาพักให้', () => {
   const env = fresh();
-  const before = JSON.stringify(env.sheets.REF.grid);
+  const before = JSON.stringify(env.sheets.Exercises.grid);
   assert.equal(env.call('addExercise', ['Pec deck fly', 'strength']).data.ok, true);
   assert.equal(env.call('addExercise', ['pec DECK fly', 'strength']).data.existed, true);
   env.call('addExercise', ['Cycling', 'cardio']);
-  const g = env.sheets.REF.grid;
-  assert.equal(JSON.stringify(g.slice(0, 4)), before);
-  assert.deepEqual(g[4], ['Pec deck fly', '', 'strength']);
-  assert.deepEqual(g[5], ['Cycling', '', 'cardio']);
-  assert.ok(env.sheets.REF.writes.every((w) => w.row >= 5), 'เขียนเฉพาะแถวใหม่');
+  env.call('addExercise', ['Deadlift', 'strength']);
+  const g = env.sheets.Exercises.grid;
+  assert.equal(JSON.stringify(g.slice(0, 5)), before);
+  assert.deepEqual(g[5], ['Pec deck fly', '', 'strength', '60–90 วินาที']);
+  assert.deepEqual(g[6], ['Cycling', '', 'cardio', '']);
+  assert.deepEqual(g[7], ['Deadlift', '', 'strength', '~2 นาที']);
+  assert.ok(env.sheets.Exercises.writes.every((w) => w.row >= 6), 'เขียนเฉพาะแถวใหม่');
+});
+
+test('สถานที่: เพิ่มลง Places อัตโนมัติตอนบันทึก สีไล่ตามชุด ไม่ซ้ำ ไม่แตะแถวเดิม', () => {
+  const env = fresh();
+  env.call('saveExercise', [meta(), ex()]);
+  env.call('saveExercise', [meta({ id: 's2', gym: 'ยิม B' }), ex()]);
+  env.call('saveMeta', [meta({ id: 's2', gym: 'ยิม C' })]);
+  env.call('saveExercise', [meta({ id: 's3' }), ex()]); // ยิมหลักซ้ำ ไม่เพิ่มแถว
+  const g = env.sheets.Places.grid;
+  assert.deepEqual(g[0], ['Place', 'Color', 'Note']);
+  assert.deepEqual(g.slice(1).map((r) => [r[0], r[1]]), [['ยิมหลัก', '#C8F169'], ['ยิม B', '#7CC4F5'], ['ยิม C', '#F5B461']]);
+  assert.equal(env.call('addPlace', ['ยิมหลัก']).data.existed, true);
+  assert.equal(env.sheets.Places.grid.length, 4);
+  // ไม่มีสถานที่ = ไม่เพิ่มแถว
+  env.call('saveExercise', [meta({ id: 's4', gym: '' }), ex()]);
+  assert.equal(env.sheets.Places.grid.length, 4);
+});
+
+test('bootstrap: gyms รวม Places (แม้ n = 0) + สี และเวลาพักจากชีต', () => {
+  const env = fresh();
+  env.addSheet('Places', [['Place', 'Color', 'Note'], ['ยิมหลัก', '#C8F169', ''], ['ยิมใหม่ยังไม่เคยไป', '#7CC4F5', '']]);
+  env.call('saveExercise', [meta(), ex()]);
+  env.call('saveExercise', [meta({ id: 's2', gym: 'ไม่อยู่ใน Places' }), ex()]);
+  const b = env.call('bootstrap').data;
+  const m = Object.fromEntries(b.gyms.map((g) => [g.name, [g.n, g.color]]));
+  assert.equal(m['ยิมหลัก'][0], 1);
+  assert.equal(m['ยิมหลัก'][1], '#C8F169');
+  assert.deepEqual(m['ยิมใหม่ยังไม่เคยไป'], [0, '#7CC4F5']);
+  assert.ok(m['ไม่อยู่ใน Places'][0] === 0 || m['ไม่อยู่ใน Places'][0] === 1);
+  assert.equal(b.exercises.find((e) => e.name === 'Bench press').rest, '~2 นาที');
+  assert.equal(b.exercises.find((e) => e.name === 'Lat pulldown').rest, '');
 });
 
 function seedSessions(env, n) {
@@ -208,41 +242,11 @@ test('last: จาก Log ล่าสุด (ไม่นับเซสชั�
   assert.deepEqual(r.sets, [{ r: 10, w: 40 }]);
 });
 
-// ชีตเก่า: แถวชื่อท่า = reps (D:I), แถวถัดไป = น้ำหนัก, วันที่อยู่คอลัมน์ A
-function oldSheet(env) {
-  return env.addSheet('69', [
-    [new Date('2026-09-01T00:00:00+07:00'), '', '', '', '', '', '', '', ''],
-    ['', 'Seated cable row', '', 12, 12, 10, 9, '', ''],
-    ['', '', '', 45, 45, 45, '', '', ''],
-    [new Date('2026-09-08T00:00:00+07:00'), '', '', '', '', '', '', '', ''],
-    ['', 'Seated cable row', '', 13, 12, 10, '', '', ''],
-    ['', '', '', 50, '', '', '', '', '']
-  ]);
-}
-
-test('last: ไม่มีใน Log → อ่านจากชีตเก่า (แถวล่างสุดก่อน, น้ำหนักเติมจากเซ็ตก่อนหน้า)', () => {
+test('last: ไม่มีประวัติ = null (ไม่อ่านชีตอื่นนอก Log)', () => {
   const env = fresh();
-  oldSheet(env);
-  const r = env.call('last', ['Seated Cable Row', 'x']).data;
-  assert.equal(r.date, '2026-09-08');
-  assert.deepEqual(r.sets, [{ r: 13, w: 50 }, { r: 12, w: 50 }, { r: 10, w: 50 }]);
   assert.equal(env.call('last', ['ไม่มีท่านี้', 'x']).data, null);
-});
-
-test('ห้ามเขียนชีตเก่า / แก้แถวเดิมใน REF ตลอดทุก action', () => {
-  const env = fresh();
-  const old = oldSheet(env);
-  const refBefore = JSON.stringify(env.sheets.REF.grid);
-  seedSessions(env, 3);
-  env.call('saveMeta', [meta({ id: 's1', gym: 'X' })]);
-  env.call('deleteExercise', ['s2', 'Bench press']);
-  env.call('addExercise', ['New one', 'strength']);
-  env.call('bootstrap');
-  env.call('sessions', [0, 10]);
-  env.call('last', ['Seated cable row', '']);
-  assert.equal(old.writes.length, 0);
-  assert.equal(JSON.stringify(env.sheets.REF.grid.slice(0, 4)), refBefore);
-  assert.ok(env.sheets.REF.writes.every((w) => w.row > 4));
+  env.addSheet('69', [['x', 'Bench press', '', 99]]); // ชีตเก่าในไฟล์เดียวกัน (ถ้ามี) ต้องไม่ถูกอ่าน
+  assert.equal(env.call('last', ['Bench press', 'x']).data, null);
 });
 
 test('ตอบเป็น JSON mime และ error ไม่หลุด stack', () => {
