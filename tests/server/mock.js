@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CODE = fs.readFileSync(path.join(here, '../../apps-script/Code.gs'), 'utf8');
 const MIGRATE = fs.readFileSync(path.join(here, '../../apps-script/Migrate.gs'), 'utf8');
+const VIEW = fs.readFileSync(path.join(here, '../../apps-script/View.gs'), 'utf8');
 const SETUP = fs.readFileSync(path.join(here, '../../apps-script/Setup.gs'), 'utf8');
 
 function colToNum(s) {
@@ -58,7 +59,7 @@ export class MockSheet {
     } else {
       row = a; col = b; nr = c || 1; nc = d || 1;
     }
-    return {
+    const api = {
       getValues() {
         const out = [];
         for (let i = 0; i < nr; i++) {
@@ -72,16 +73,46 @@ export class MockSheet {
         if (vals.length !== nr || vals[0].length !== nc) throw new Error('mock: size mismatch');
         sh.writes.push({ op: 'setValues', row, col, nr, nc });
         vals.forEach((r, i) => r.forEach((v, j) => sh._set(row - 1 + i, col - 1 + j, v)));
+        return proxy;
       },
       setValue(v) {
         sh.writes.push({ op: 'setValue', row, col, nr: 1, nc: 1 });
         sh._set(row - 1, col - 1, v);
+        return proxy;
       },
       setNumberFormat(f) {
         sh.writes.push({ op: 'fmt', row, col, nr, nc });
         for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) sh.fmt[row - 1 + i + ',' + (col - 1 + j)] = f;
+        return proxy;
+      },
+      setBackgrounds(b) {
+        sh.writes.push({ op: 'bg', row, col, nr, nc });
+        sh.backgrounds = sh.backgrounds || {};
+        b.forEach((r, i) => r.forEach((c, j) => (sh.backgrounds[row - 1 + i + ',' + (col - 1 + j)] = c)));
+        return proxy;
       }
     };
+    // เมธอดจัดรูปแบบอื่น ๆ (ตัวหนา สี ฯลฯ) ไม่กระทบข้อมูล: รับแล้วคืน range เดิมให้ต่อ chain ได้
+    const proxy = new Proxy(api, {
+      get(t, k) {
+        if (k in t) return t[k];
+        if (typeof k === 'string' && /^set[A-Z]/.test(k)) return () => proxy;
+        return undefined;
+      }
+    });
+    return proxy;
+  }
+  clear() {
+    this.writes.push({ op: 'clear' });
+    this.grid = [];
+    this.fmt = {};
+    this.backgrounds = {};
+  }
+  setColumnWidth() {}
+  protect() {
+    const p = { warningOnly: false, setWarningOnly(v) { p.warningOnly = v; return p; } };
+    this.protection = p;
+    return p;
   }
   deleteRows(start, count) {
     this.writes.push({ op: 'deleteRows', row: start, nr: count });
@@ -96,6 +127,7 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   const props = token === null ? {} : { API_TOKEN: token };
   const cache = {};
   const logs = [];
+  const triggers = [];
   const idTokens = {};
   const fetched = [];
   const owner = { email: 'owner@example.test' };
@@ -151,6 +183,11 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
         remove: (k) => { delete cache[k]; }
       })
     },
+    ScriptApp: {
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: (t) => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); },
+      newTrigger: (fn) => ({ timeBased: () => ({ everyMinutes: (n) => ({ create: () => { const t = { fn, n, getHandlerFunction: () => fn }; triggers.push(t); return t; } }) }) })
+    },
     ContentService: {
       MimeType: { JSON: 'application/json' },
       createTextOutput: (s) => ({ content: s, setMimeType(m) { this.mime = m; return this; }, getContent() { return this.content; } })
@@ -159,10 +196,11 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   vm.createContext(ctx);
   vm.runInContext(CODE, ctx, { filename: 'Code.gs' });
   vm.runInContext(MIGRATE, ctx, { filename: 'Migrate.gs' });
+  vm.runInContext(VIEW, ctx, { filename: 'View.gs' });
   vm.runInContext(SETUP, ctx, { filename: 'Setup.gs' });
 
   const env = {
-    ctx, sheets, props, cache, books, logs, idTokens, fetched, owner,
+    ctx, sheets, props, cache, books, logs, triggers, idTokens, fetched, owner,
     // สร้างสเปรดชีตอื่น (เช่นไฟล์เก่า) พร้อมเก็บบันทึกการเขียนของทุกชีตในนั้น
     addBook(id) {
       const bs = {};

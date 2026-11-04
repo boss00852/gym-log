@@ -245,7 +245,9 @@ function migrateDryRun() {
 }
 
 function migrateAll() {
-  return migrate_(false);
+  var report = migrate_(false);
+  rebuildView(); // สร้างหน้า View (อ่านง่าย) ให้ทันที
+  return report;
 }
 
 // ลบเฉพาะแถวที่ย้ายมา (Source ไม่ว่าง) — แถวที่แอปบันทึกเองไม่ถูกแตะ

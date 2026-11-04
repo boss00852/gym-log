@@ -48,9 +48,11 @@ function doPost(e) {
     var data;
     if (WRITE_[body.action]) {
       data = withLock_(function () {
-        return once_(body.opId, function () {
+        var res = once_(body.opId, function () {
           return fn.apply(null, args);
         });
+        PropertiesService.getScriptProperties().setProperty('VIEW_DIRTY', '1'); // ให้หน้า View อัปเดตในรอบถัดไป
+        return res;
       });
     } else {
       data = fn.apply(null, args);
@@ -424,7 +426,7 @@ function buildSessions_(rows) {
     var nk = r.name.toLowerCase();
     var it = s.ix[nk];
     if (!it) {
-      it = s.ix[nk] = { name: r.name, kind: r.kind, sets: [], min: '', hr: '', note: '' };
+      it = s.ix[nk] = { name: r.name, kind: r.kind, sets: [], min: '', hr: '', dist: '', note: '' };
       s.items.push(it);
       usage[nk] = (usage[nk] || 0) + 1;
     }
@@ -432,6 +434,7 @@ function buildSessions_(rows) {
     if (r.kind === 'cardio') {
       it.min = r.min;
       it.hr = r.hr;
+      it.dist = r.dist;
     } else if (r.reps !== '' || r.w !== '') {
       it.sets[Math.max(0, r.set - 1)] = { r: r.reps, w: r.w };
     }

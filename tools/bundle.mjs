@@ -1,4 +1,4 @@
-// รวม Code.gs + Migrate.gs + Setup.gs เป็นไฟล์เดียวสำหรับวางใน Apps Script ครั้งเดียว
+// รวม Code.gs + Migrate.gs + View.gs + Setup.gs เป็นไฟล์เดียวสำหรับวางใน Apps Script ครั้งเดียว
 // ใช้:  node tools/bundle.mjs [OLD_BOOK_ID] [GOOGLE_CLIENT_ID] [ALLOWED_EMAIL]   → dist/gym-log-all.gs (โฟลเดอร์ dist/ ไม่ถูก commit)
 //       (ข้าม OLD_BOOK_ID ด้วย "" ได้ถ้าย้ายข้อมูลเก่าเสร็จแล้ว)
 import fs from 'node:fs';
@@ -27,7 +27,7 @@ let setup = read('Setup.gs');
 if (email) setup = setup.replace("'PASTE_ALLOWED_EMAIL_HERE'", q(email));
 if (oldId) setup = setup.replace("'PASTE_OLD_BOOK_ID_HERE'", q(oldId));
 if (clientId) setup = setup.replace("'PASTE_GOOGLE_CLIENT_ID_HERE'", q(clientId));
-const out = ['// ===== Code.gs =====', read('Code.gs'), '// ===== Migrate.gs =====', read('Migrate.gs'), '// ===== Setup.gs =====', setup].join('\n');
+const out = ['// ===== Code.gs =====', read('Code.gs'), '// ===== Migrate.gs =====', read('Migrate.gs'), '// ===== View.gs =====', read('View.gs'), '// ===== Setup.gs =====', setup].join('\n');
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 const file = path.join(root, 'dist', 'gym-log-all.gs');
 fs.writeFileSync(file, out);
