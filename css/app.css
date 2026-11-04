@@ -125,3 +125,8 @@ h1{margin:0;font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.2}
 .res.ok{color:var(--acc)}.res.err{color:var(--red)}
 .btn{min-height:48px;border-radius:24px;border:0;padding:0 20px;font-size:16px;font-weight:600;background:var(--acc);color:var(--bg);width:100%;margin-top:8px}
 .btn.ghost{background:none;border:1px solid var(--line2);color:var(--tx);font-weight:500}
+
+/* ---------- เข้าสู่ระบบด้วย Google ---------- */
+.gbtn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px}
+.adv{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.adv summary{font-size:13px;color:var(--mut);cursor:pointer;padding:6px 0}

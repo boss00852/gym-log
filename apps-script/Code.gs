@@ -11,7 +11,8 @@
  *
  * Endpoint เดียว: doPost(e)  body = JSON {token, action, args, opId} (ส่งเป็น text/plain)
  * ตอบ {ok:true, data} หรือ {ok:false, error}
- * ความปลอดภัย: Script Property "API_TOKEN" (ไม่ตรง = unauthorized และไม่คืนข้อมูลใด ๆ)
+ * ความปลอดภัย: เข้าสู่ระบบด้วย Google (action login → session token) หรือ Script Property "API_TOKEN" (เดิม)
+ *               ไม่มี token ที่ถูกต้อง = unauthorized และไม่คืนข้อมูลใด ๆ
  */
 
 var LOG_SHEET = 'Log';
@@ -26,6 +27,8 @@ var SMALL_RE = /curl|raise|pushdown|push down|extension|fly|crunch|calf|kickback
 var PAGE_DEFAULT = 10;
 var PAGE_MAX = 50;
 var MAX_SETS = 30;
+var SESSION_DAYS = 180; // อายุ session หลังเข้าสู่ระบบด้วย Google
+var MAX_SESSIONS = 20; // จำนวนอุปกรณ์สูงสุดที่ล็อกอินค้างไว้ได้
 var OP_TTL = 6 * 60 * 60; // วินาที — เก็บ opId กันบันทึกซ้ำตอน retry
 
 /* ---------- entry points ---------- */
@@ -37,6 +40,7 @@ function doGet() {
 function doPost(e) {
   try {
     var body = parseBody_(e);
+    if (body.action === 'login') return json_(loginAction_(body.args)); // ไม่ต้องมี token (ใช้ Google ID token แทน)
     if (!tokenOk_(body.token)) return json_({ ok: false, error: 'unauthorized' });
     var fn = ACTIONS_[body.action];
     if (!fn) return json_({ ok: false, error: 'unknown-action' });
@@ -84,12 +88,125 @@ function parseBody_(e) {
   }
 }
 
+/* ---------- ยืนยันตัวตน ----------
+ * 1) เข้าสู่ระบบด้วย Google (แนะนำ): client ส่ง Google ID token มาที่ action "login" (เรียกได้โดยไม่ต้องมี token)
+ *    เซิร์ฟเวอร์ตรวจกับ Google (aud = GOOGLE_CLIENT_ID, อีเมลยืนยันแล้ว, ตรงกับ ALLOWED_EMAIL หรือเจ้าของสคริปต์)
+ *    แล้วออก "session token" อายุ SESSION_DAYS วัน — เก็บเฉพาะค่าแฮชไว้ใน Script Property SESSIONS
+ * 2) API_TOKEN (เดิม): ยังใช้ได้ถ้ายังตั้งค่าไว้ — ลบ property นี้เพื่อปิด (disableLegacyToken)
+ * ทุก action อื่นต้องมี token ที่ถูกต้องอย่างใดอย่างหนึ่ง ไม่งั้นตอบ unauthorized โดยไม่คืนข้อมูล
+ */
+
+function sha256Hex_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
+    .map(function (b) {
+      var v = (b < 0 ? b + 256 : b).toString(16);
+      return v.length < 2 ? '0' + v : v;
+    })
+    .join('');
+}
+
+function readSessions_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty('SESSIONS');
+    var o = raw ? JSON.parse(raw) : {};
+    return o && typeof o === 'object' ? o : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function sessionOk_(t) {
+  if (typeof t !== 'string' || t.length < 32 || t.length > 200) return false;
+  var s = readSessions_()[sha256Hex_(t)];
+  return !!s && s.exp > Date.now();
+}
+
 function tokenOk_(t) {
+  if (typeof t !== 'string' || !t) return false;
   var real = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
-  if (!real || typeof t !== 'string' || t.length !== real.length) return false;
-  var diff = 0; // เทียบแบบเวลาคงที่
-  for (var i = 0; i < real.length; i++) diff |= real.charCodeAt(i) ^ t.charCodeAt(i);
-  return diff === 0;
+  if (real && t.length === real.length) {
+    var diff = 0; // เทียบแบบเวลาคงที่
+    for (var i = 0; i < real.length; i++) diff |= real.charCodeAt(i) ^ t.charCodeAt(i);
+    if (diff === 0) return true;
+  }
+  return sessionOk_(t);
+}
+
+// ตรวจ Google ID token กับ Google (ตรวจลายเซ็น/อายุ) แล้วเช็ก aud, iss, อีเมลที่ยืนยันแล้ว
+function verifyIdToken_(idToken, clientId) {
+  if (typeof idToken !== 'string' || idToken.length > 4096 || !/^[\w-]+\.[\w-]+\.[\w-]+$/.test(idToken)) throw new Error('unauthorized');
+  var res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('unauthorized');
+  var info;
+  try {
+    info = JSON.parse(res.getContentText());
+  } catch (e) {
+    throw new Error('unauthorized');
+  }
+  var issOk = info.iss === 'accounts.google.com' || info.iss === 'https://accounts.google.com';
+  var verified = info.email_verified === true || info.email_verified === 'true';
+  var live = Number(info.exp) * 1000 > Date.now();
+  if (info.aud !== clientId || !issOk || !verified || !live || !info.email) throw new Error('unauthorized');
+  return info;
+}
+
+// แลก Google ID token เป็น session token (เรียกภายใน lock)
+function login_(idToken) {
+  var props = PropertiesService.getScriptProperties();
+  var clientId = props.getProperty('GOOGLE_CLIENT_ID');
+  if (!clientId) throw new Error('not-configured');
+  var cache = CacheService.getScriptCache();
+  var tries = Number(cache.get('login-tries') || 0);
+  if (tries >= 10) throw new Error('too-many-attempts'); // กันยิงรัวจนโควตา UrlFetch หมด
+  cache.put('login-tries', String(tries + 1), 600);
+
+  var info = verifyIdToken_(idToken, clientId);
+  var allowed = String(props.getProperty('ALLOWED_EMAIL') || Session.getEffectiveUser().getEmail()).toLowerCase();
+  if (String(info.email).toLowerCase() !== allowed) throw new Error('unauthorized');
+
+  var token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  var now = Date.now();
+  var sessions = readSessions_();
+  Object.keys(sessions).forEach(function (h) {
+    if (sessions[h].exp <= now) delete sessions[h];
+  });
+  var keys = Object.keys(sessions).sort(function (a, b) {
+    return sessions[a].created - sessions[b].created;
+  });
+  while (keys.length >= MAX_SESSIONS) delete sessions[keys.shift()]; // เก็บล่าสุดเท่านั้น
+  var exp = now + SESSION_DAYS * 24 * 3600 * 1000;
+  sessions[sha256Hex_(token)] = { exp: exp, created: now };
+  props.setProperty('SESSIONS', JSON.stringify(sessions));
+  cache.remove('login-tries');
+  return { session: token, email: String(info.email), expires: exp };
+}
+
+function loginAction_(args) {
+  try {
+    var data = withLock_(function () {
+      return login_(args && args[0]);
+    });
+    return { ok: true, data: data };
+  } catch (err) {
+    var m = String((err && err.message) || err);
+    // ไม่บอกรายละเอียดว่าผิดตรงไหน (ยกเว้นยังไม่ตั้งค่า/ลองถี่เกินไป)
+    return { ok: false, error: m === 'not-configured' || m === 'too-many-attempts' ? m : 'unauthorized' };
+  }
+}
+
+// ใช้ใน Apps Script editor: ยกเลิกทุกอุปกรณ์ที่เคยล็อกอินไว้ (ต้องล็อกอินใหม่)
+function revokeSessions() {
+  PropertiesService.getScriptProperties().deleteProperty('SESSIONS');
+  Logger.log('ยกเลิกการล็อกอินทุกอุปกรณ์แล้ว');
+}
+
+// ใช้ใน Apps Script editor: ดูจำนวนอุปกรณ์ที่ล็อกอินอยู่ (ไม่แสดง token)
+function listSessions() {
+  var s = readSessions_();
+  var lines = Object.keys(s).map(function (h) {
+    return 'สร้าง ' + new Date(s[h].created).toISOString() + ' · หมดอายุ ' + new Date(s[h].exp).toISOString();
+  });
+  Logger.log(lines.length ? lines.join('\n') : 'ไม่มีการล็อกอินค้างอยู่');
 }
 
 // กันซ้ำ: opId เดิมที่เคยสำเร็จแล้ว ตอบ ok ซ้ำโดยไม่เขียนอีก (เรียกภายใน lock เท่านั้น)

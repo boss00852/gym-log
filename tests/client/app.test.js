@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, waitFor, addExerciseUI, closeAll, boot, TOKEN } from './harness.js';
+import { setup, waitFor, addExerciseUI, closeAll, boot, TOKEN, JWT, CLIENT_ID } from './harness.js';
 
 test.afterEach(() => closeAll());
 import { isoToBE, parseBE, parseTime } from '../../js/date.js';
@@ -476,4 +476,78 @@ test('ตัวอย่างข้อมูลจากชีตถูกแ�
   assert.equal(t.$$('img').length, 0);
   assert.equal(t.$$('.sc b').length, 0);
   assert.ok(t.$('.sc').textContent.includes('<b>bold</b>'));
+});
+
+/* ---------- เข้าสู่ระบบด้วย Google ---------- */
+test('Google: เปิดครั้งแรก = ปุ่มเข้าสู่ระบบ (ไม่ต้องวาง token) ล็อกอินแล้วโหลดข้อมูลได้', async () => {
+  const t = setup({ noConfig: true, seed: 3, google: true });
+  t.storage.set('gl_api_url', 'https://script.google.com/macros/s/TEST/exec');
+  t.app.start();
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  assert.equal(t.win.google.accounts.id.cfg.client_id, CLIENT_ID);
+  assert.ok(!t.$('#s-adv').open, 'ช่อง token ซ่อนอยู่ในหมวดขั้นสูง');
+  assert.ok(!t.$('.bk'), 'ยังไม่ล็อกอิน → ไม่มีปุ่มย้อนกลับ');
+  await t.win.google.accounts.id.cfg.callback({ credential: JWT });
+  await waitFor(() => t.$$('.sc').length === 3);
+  const session = t.storage.get('gl_token');
+  assert.match(session, /^[0-9a-f]{64}$/);
+  assert.equal(t.storage.get('gl_email'), 'owner@example.test');
+  // คำขอ login ไม่มี token ติดไปด้วย; คำขออื่นใช้ session
+  const loginReq = t.net.calls.find((c) => c.action === 'login');
+  assert.deepEqual(Object.keys(loginReq).sort(), ['action', 'args']);
+  assert.equal(t.net.calls.find((c) => c.action === 'bootstrap').token, session);
+});
+
+test('Google: บัญชีที่ไม่ได้รับอนุญาต → แจ้งเตือน ไม่เก็บ token และไม่เห็นข้อมูล', async () => {
+  const t = setup({ noConfig: true, seed: 3, google: true });
+  t.env.idTokens[JWT].email = 'stranger@example.test';
+  t.storage.set('gl_api_url', 'https://script.google.com/macros/s/TEST/exec');
+  t.app.start();
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  await t.win.google.accounts.id.cfg.callback({ credential: JWT });
+  await waitFor(() => /ไม่ได้รับอนุญาต/.test(t.$('#s-res').textContent));
+  assert.equal(t.storage.get('gl_token', null), null);
+  assert.equal(t.$$('.sc').length, 0);
+});
+
+test('Google: URL ผิดรูปแบบ (http) ไม่ยิงคำขอ login', async () => {
+  const t = setup({ noConfig: true, google: true });
+  t.app.start();
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  t.type(t.$('#s-url'), 'http://evil.example/exec');
+  await t.win.google.accounts.id.cfg.callback({ credential: JWT });
+  assert.match(t.$('#s-res').textContent, /URL ไม่ถูกต้อง/);
+  assert.equal(t.net.calls.length, 0);
+});
+
+test('Google: session ที่เซิร์ฟเวอร์ยกเลิก → จุดแดง แตะแล้วล็อกอินใหม่ได้; ออกจากระบบลบ session ในเครื่อง', async () => {
+  const t = setup({ noConfig: true, seed: 2, google: true });
+  t.storage.set('gl_api_url', 'https://script.google.com/macros/s/TEST/exec');
+  t.app.start();
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  await t.win.google.accounts.id.cfg.callback({ credential: JWT });
+  await waitFor(() => t.$$('.sc').length === 2);
+  t.env.ctx.revokeSessions();
+  await t.app.refresh();
+  assert.ok(t.$('[data-badge].st-auth'));
+  t.click(t.$('[data-badge]'));
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  assert.match(t.$('#s-who').textContent, /owner@example.test/);
+  t.click(t.$('#s-logout'));
+  assert.equal(t.storage.get('gl_token', null), null);
+  assert.equal(t.$('#s-who'), null);
+  await waitFor(() => t.$('#g-btn[data-rendered="1"]'));
+  await t.win.google.accounts.id.cfg.callback({ credential: JWT });
+  await waitFor(() => t.$$('.sc').length === 2);
+});
+
+test('Google: ยังวาง API token แบบเดิมได้ในหมวดขั้นสูง (ใช้ร่วมกันได้)', async () => {
+  const t = setup({ noConfig: true, seed: 2, google: true });
+  t.storage.set('gl_api_url', 'https://script.google.com/macros/s/TEST/exec');
+  t.app.start();
+  t.type(t.$('#s-token'), TOKEN);
+  t.click(t.$('#s-test'));
+  await waitFor(() => /เชื่อมต่อสำเร็จ · พบ 2 เซสชัน/.test(t.$('#s-res').textContent));
+  t.click(t.$('#s-save'));
+  await waitFor(() => t.$$('.sc').length === 2);
 });

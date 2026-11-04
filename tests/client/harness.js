@@ -39,13 +39,22 @@ export async function waitFor(fn, ms = 1500) {
   }
 }
 
-export function setup({ token = TOKEN, serverToken = TOKEN, seed = 0, preset = {}, noConfig = false, nowRef } = {}) {
+export const CLIENT_ID = '1234-test.apps.googleusercontent.com';
+export const JWT = 'aaaa.bbbb.cccc';
+
+export function setup({ token = TOKEN, serverToken = TOKEN, seed = 0, preset = {}, noConfig = false, nowRef, google = false } = {}) {
   const env = createEnv({ token: serverToken });
   seedServer(env, seed);
+  if (google) {
+    env.props.GOOGLE_CLIENT_ID = CLIENT_ID;
+    env.idTokens[JWT] = { aud: CLIENT_ID, iss: 'https://accounts.google.com', email: 'owner@example.test', email_verified: 'true', exp: String(Math.floor(Date.now() / 1000) + 3000) };
+    env.owner.email = 'owner@example.test';
+  }
   const dom = new JSDOM('<!doctype html><html><body><div id="app"></div></body></html>', { url: `https://gym${++seq}.test/`, pretendToBeVisual: true });
   const win = dom.window;
   open.push(win);
   win.scrollTo = () => {};
+  if (google) win.google = { accounts: { id: { initialize(c) { this.cfg = c; }, renderButton(el) { el.setAttribute('data-rendered', '1'); } } } }; // Google Identity Services จำลอง
   const net = { offline: false, dropResponse: 0, calls: [], lastInit: null };
   const fetchFn = async (url, init) => {
     net.lastInit = { url, init };
@@ -65,7 +74,7 @@ export function setup({ token = TOKEN, serverToken = TOKEN, seed = 0, preset = {
   }
   Object.entries(preset).forEach(([k, v]) => storage.set(k, v));
   const api = createApi({ storage, fetchFn });
-  const app = createApp({ win, api, storage, opts: { debounceMs: 15, retryMs: 40, now: nowRef ? () => nowRef.t : undefined } });
+  const app = createApp({ win, api, storage, opts: { debounceMs: 15, retryMs: 40, now: nowRef ? () => nowRef.t : undefined, googleClientId: google ? CLIENT_ID : '' } });
   const $ = (sel, root = win.document) => root.querySelector(sel);
   const $$ = (sel, root = win.document) => [...root.querySelectorAll(sel)];
   const type = (el, value) => {

@@ -112,6 +112,21 @@ node tools/bundle.mjs <ID ของไฟล์เก่า>      # ได้ di
 
 ---
 
+## เข้าสู่ระบบด้วย Google (แทนการวาง token)
+
+ปุ่ม "เข้าสู่ระบบด้วย Google" ในหน้าตั้งค่า: กดล็อกอินครั้งเดียวต่อเครื่อง ไม่ต้องคัดลอก token เซิร์ฟเวอร์ตรวจ Google ID token (aud ตรง Client ID, อีเมลยืนยันแล้ว, ตรงกับเจ้าของสคริปต์หรือ `ALLOWED_EMAIL`) แล้วออก session token อายุ 180 วัน เก็บเฉพาะค่าแฮชไว้ใน Script Property `SESSIONS` (ล็อกอินค้างได้สูงสุด 20 เครื่อง) ส่วน API token แบบเดิมยังใช้ได้เป็นทางสำรอง
+
+### ตั้งค่าครั้งเดียว (Google Cloud Console — ฟรี ไม่ต้องผูกบัตร)
+
+1. เปิด https://console.cloud.google.com → สร้างโปรเจกต์ใหม่ (ชื่อเช่น "Gym Log")
+2. **APIs & Services → OAuth consent screen** (หรือ *Google Auth Platform*): User type = **External**, ตั้งชื่อแอป "Gym Log", ใส่อีเมลติดต่อ — ไม่ต้องเพิ่ม scope พิเศษ แล้วเพิ่มบัญชีของคุณใน **Test users** (ปล่อยเป็นโหมด Testing ได้ เพราะไม่ได้ใช้ refresh token)
+3. **Credentials → Create credentials → OAuth client ID** → ชนิด **Web application** → *Authorized JavaScript origins* ใส่ `https://boss00852.github.io` (ไม่มี path ไม่มี `/` ท้าย; จะเพิ่ม `http://localhost:4173` สำหรับทดสอบในเครื่องด้วยก็ได้) → Create → คัดลอก **Client ID** (ลงท้าย `.apps.googleusercontent.com`; เป็นค่าสาธารณะ ไม่ใช่ความลับ)
+4. ใส่ Client ID ใน [`config.js`](config.js) (`googleClientId`) แล้ว push
+5. ที่ Apps Script: สร้างไฟล์รวมใหม่ `node tools/bundle.mjs "" <CLIENT_ID>` → วางทับแล้วกดรัน **`setup`** (จะตั้ง `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL` และขอสิทธิ์ UrlFetch) → **Deploy → Manage deployments → ✏️ → New version → Deploy** (URL เดิม)
+6. เปิดแอป → ตั้งค่าการเชื่อมต่อ → กด **Sign in with Google**
+
+ฟังก์ชันดูแลระบบใน Apps Script: `listSessions` (ดูจำนวนเครื่องที่ล็อกอินอยู่), `revokeSessions` (ให้ทุกเครื่องล็อกอินใหม่), `disableLegacyToken` (ปิด API token แบบเดิม เหลือเฉพาะ Google)
+
 ## วิธีใช้ (สั้น ๆ)
 
 - หน้าแรก: เซสชันล่าสุดก่อน โหลดทีละ 10 เลื่อนลงเพื่อโหลดเพิ่ม; ไอคอน/ปุ่ม "ดูทั้งหมดใน Google Sheet" เปิดแท็บ `Log`

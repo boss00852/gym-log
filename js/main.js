@@ -7,7 +7,7 @@ try { ls = window.localStorage; } catch (e) {}
 const storage = createStorage(ls);
 const cfg = window.GYMLOG_CONFIG || {};
 const api = createApi({ storage, fetchFn: (...a) => window.fetch(...a), defaultUrl: cfg.apiUrl || '' });
-const app = createApp({ win: window, api, storage });
+const app = createApp({ win: window, api, storage, opts: { googleClientId: cfg.googleClientId || '' } });
 window.__gl = app;
 app.start();
 

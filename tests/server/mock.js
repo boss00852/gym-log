@@ -96,6 +96,9 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   const props = token === null ? {} : { API_TOKEN: token };
   const cache = {};
   const logs = [];
+  const idTokens = {};
+  const fetched = [];
+  const owner = { email: 'owner@example.test' };
   let lockDepth = 0;
   const ss = {
     getSheetByName: (n) => sheets[n] || null,
@@ -109,9 +112,22 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
     JSON,
     Math,
     SpreadsheetApp: { getActive: () => ss, openById: (id) => { if (!books[id]) throw new Error('no book ' + id); return books[id].ss; } },
+    Session: { getEffectiveUser: () => ({ getEmail: () => owner.email }) },
+    // tokeninfo จำลอง: env.idTokens[idToken] = ข้อมูลที่ Google จะตอบ (ไม่มี = 400)
+    UrlFetchApp: {
+      fetch: (url) => {
+        const t = decodeURIComponent(url.split('id_token=')[1] || '');
+        const info = idTokens[t];
+        fetched.push(url);
+        return { getResponseCode: () => (info ? 200 : 400), getContentText: () => JSON.stringify(info || { error: 'invalid_token' }) };
+      }
+    },
     Logger: { log(m) { logs.push(String(m)); } },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
+      DigestAlgorithm: { SHA_256: 'SHA-256' },
+      Charset: { UTF_8: 'UTF-8' },
+      computeDigest: (alg, s) => [...crypto.createHash('sha256').update(String(s), 'utf8').digest()].map((b) => (b > 127 ? b - 256 : b)),
       formatDate(d, zone, pattern) {
         // รองรับเฉพาะ pattern ที่ใช้ใน Code.gs
         const p = new Intl.DateTimeFormat('en-CA', {
@@ -127,11 +143,12 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
         releaseLock() { lockDepth--; }
       })
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: (k) => { delete props[k]; } }) },
     CacheService: {
       getScriptCache: () => ({
         get: (k) => cache[k] ?? null,
-        put: (k, v) => { cache[k] = v; }
+        put: (k, v) => { cache[k] = v; },
+        remove: (k) => { delete cache[k]; }
       })
     },
     ContentService: {
@@ -145,7 +162,7 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   vm.runInContext(SETUP, ctx, { filename: 'Setup.gs' });
 
   const env = {
-    ctx, sheets, props, cache, books, logs,
+    ctx, sheets, props, cache, books, logs, idTokens, fetched, owner,
     // สร้างสเปรดชีตอื่น (เช่นไฟล์เก่า) พร้อมเก็บบันทึกการเขียนของทุกชีตในนั้น
     addBook(id) {
       const bs = {};

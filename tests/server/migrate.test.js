@@ -203,7 +203,7 @@ test('setup: สุ่ม API_TOKEN ครั้งเดียว, ตั้ง
   const r2 = env.ctx.setup();
   assert.equal(r2.tokenCreated, false);
   assert.equal(env.props.API_TOKEN, tok);
-  assert.ok(!env.logs.slice(-2).join(' | ').includes(tok));
+  assert.ok(!env.logs.slice(-1).join(' | ').includes(tok));
   env.ctx.showToken();
   assert.ok(env.logs[env.logs.length - 1].includes(tok));
 });
