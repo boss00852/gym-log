@@ -1,5 +1,6 @@
 // Mock ของ Apps Script (SpreadsheetApp ฯลฯ) สำหรับทดสอบ Code.gs ด้วย Node vm — ไม่แตะชีตจริง
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CODE = fs.readFileSync(path.join(here, '../../apps-script/Code.gs'), 'utf8');
 const MIGRATE = fs.readFileSync(path.join(here, '../../apps-script/Migrate.gs'), 'utf8');
+const SETUP = fs.readFileSync(path.join(here, '../../apps-script/Setup.gs'), 'utf8');
 
 function colToNum(s) {
   let n = 0;
@@ -91,8 +93,9 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   const sheets = {};
   const books = {}; // สเปรดชีตอื่น (ไฟล์เก่า) สำหรับ openById
   let nextId = 100;
-  const props = { API_TOKEN: token };
+  const props = token === null ? {} : { API_TOKEN: token };
   const cache = {};
+  const logs = [];
   let lockDepth = 0;
   const ss = {
     getSheetByName: (n) => sheets[n] || null,
@@ -106,8 +109,9 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
     JSON,
     Math,
     SpreadsheetApp: { getActive: () => ss, openById: (id) => { if (!books[id]) throw new Error('no book ' + id); return books[id].ss; } },
-    Logger: { log() {} },
+    Logger: { log(m) { logs.push(String(m)); } },
     Utilities: {
+      getUuid: () => crypto.randomUUID(),
       formatDate(d, zone, pattern) {
         // รองรับเฉพาะ pattern ที่ใช้ใน Code.gs
         const p = new Intl.DateTimeFormat('en-CA', {
@@ -123,7 +127,7 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
         releaseLock() { lockDepth--; }
       })
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
     CacheService: {
       getScriptCache: () => ({
         get: (k) => cache[k] ?? null,
@@ -138,14 +142,15 @@ export function createEnv({ token = 'secret-token', tz = 'Asia/Bangkok' } = {}) 
   vm.createContext(ctx);
   vm.runInContext(CODE, ctx, { filename: 'Code.gs' });
   vm.runInContext(MIGRATE, ctx, { filename: 'Migrate.gs' });
+  vm.runInContext(SETUP, ctx, { filename: 'Setup.gs' });
 
   const env = {
-    ctx, sheets, props, cache, books,
+    ctx, sheets, props, cache, books, logs,
     // สร้างสเปรดชีตอื่น (เช่นไฟล์เก่า) พร้อมเก็บบันทึกการเขียนของทุกชีตในนั้น
     addBook(id) {
       const bs = {};
       let bid = 900;
-      const bss = { getSheetByName: (n) => bs[n] || null, insertSheet: (n) => (bs[n] = new MockSheet(n, bid++)), getSpreadsheetTimeZone: () => tz, getUrl: () => 'https://old/' + id };
+      const bss = { getSheetByName: (n) => bs[n] || null, insertSheet: (n) => (bs[n] = new MockSheet(n, bid++)), getSpreadsheetTimeZone: () => tz, getUrl: () => 'https://old/' + id, getName: () => 'OLD ' + id, getSheets: () => Object.values(bs) };
       books[id] = { ss: bss, sheets: bs };
       return {
         sheets: bs,

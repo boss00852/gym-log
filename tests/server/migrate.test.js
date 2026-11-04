@@ -184,3 +184,33 @@ test('แก้เซสชันที่ย้ายมาในแอป (ว
   assert.equal(bench.length, 1);
   assert.equal(bench[0][14], '', 'แถวที่แอปเขียนใหม่ไม่มี Source (ไม่ถูก clearMigrated ลบ)');
 });
+
+test('setup: สุ่ม API_TOKEN ครั้งเดียว, ตั้ง OLD_BOOK_ID, เช็กไฟล์เก่า, สร้างแท็บ — ไม่เขียนไฟล์เก่า', () => {
+  const env = createEnv({ token: null }); // ยังไม่มี token
+  const old = env.addBook('OLDID12345678901234567890');
+  old.addSheet('69', [['x']]);
+  env.ctx.OLD_BOOK_ID = 'OLDID12345678901234567890';
+  const r = env.ctx.setup();
+  assert.equal(r.tokenCreated, true);
+  const tok = env.props.API_TOKEN;
+  assert.match(tok, /^[0-9a-f]{64}$/);
+  assert.equal(env.props.OLD_BOOK_ID, 'OLDID12345678901234567890');
+  assert.ok(env.logs.join(' | ').includes(tok), 'แสดง token ใน log ให้คัดลอก');
+  assert.ok(r.report.some((x) => /เปิดไฟล์เก่าได้/.test(x)));
+  assert.ok(env.sheets.Log && env.sheets.Exercises && env.sheets.Places);
+  Object.values(old.sheets).forEach((sh) => assert.equal(sh.writes.length, 0));
+  // รันซ้ำ: ไม่เปลี่ยน token และไม่โชว์ซ้ำ
+  const r2 = env.ctx.setup();
+  assert.equal(r2.tokenCreated, false);
+  assert.equal(env.props.API_TOKEN, tok);
+  assert.ok(!env.logs.slice(-2).join(' | ').includes(tok));
+  env.ctx.showToken();
+  assert.ok(env.logs[env.logs.length - 1].includes(tok));
+});
+
+test('setup: ยังไม่ใส่ OLD_BOOK_ID = ยังใช้งานได้ แต่แจ้งเตือน และไม่ตั้ง property', () => {
+  const env = createEnv({ token: null });
+  const r = env.ctx.setup();
+  assert.ok(r.report.some((x) => /ยังไม่ได้ใส่ OLD_BOOK_ID/.test(x)));
+  assert.equal(env.props.OLD_BOOK_ID, undefined);
+});

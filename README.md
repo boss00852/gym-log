@@ -31,6 +31,19 @@ tests/server  tests/client   tools/ (สร้างไอคอน, เที�
 
 ## ขั้นตอนติดตั้ง
 
+### ทางลัด (แนะนำ): วางไฟล์เดียว แล้วกดรัน `setup`
+
+```bash
+node tools/bundle.mjs <ID ของไฟล์เก่า>      # ได้ dist/gym-log-all.gs (ไม่ถูก commit)
+```
+
+1. เปิดชีตใหม่ → **ส่วนขยาย → Apps Script** → ลบโค้ดเดิม → วางเนื้อหา `dist/gym-log-all.gs` ทั้งไฟล์ → บันทึก (💾)
+2. เลือกฟังก์ชัน **`setup`** → **Run** → อนุญาตสิทธิ์ → ดู **Execution log**: จะได้ **API token** (สุ่มให้) คัดลอกเก็บไว้ + แท็บ Log/Exercises/Places ถูกสร้าง + ตั้ง `OLD_BOOK_ID` ให้แล้ว (ลืมคัดลอก → รัน `showToken`)
+3. เลือก **`migrateDryRun`** → Run → ดูสรุปใน log → แล้วเลือก **`migrateAll`** → Run
+4. **Deploy → New deployment → Web app** (Execute as: Me, Who has access: Anyone) → คัดลอก URL `/exec` → ไปข้อ 3 (GitHub Pages) และ 4 (ใส่ URL + token ในแอป)
+
+ข้อ 1–2 ด้านล่างเป็นวิธีเดียวกันแบบแยกไฟล์/ตั้ง property เอง
+
 ### 1) สร้างสเปรดชีตใหม่ + ตั้งค่า Apps Script (ครั้งเดียว)
 
 1. สร้าง Google Sheet **ใหม่เปล่า ๆ** (ชื่อเช่น "Gym Log"; ไฟล์เก่า "WORKOUT RECORD" ปล่อยไว้เป็น backup ห้ามลบ) แล้วตั้งเขตเวลาเป็น **Asia/Bangkok** (ไฟล์ → การตั้งค่า)

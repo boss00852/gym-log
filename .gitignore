@@ -4,3 +4,4 @@ config.local.js
 *.local
 tests/shots/
 handoff/
+dist/
