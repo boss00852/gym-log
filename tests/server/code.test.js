@@ -21,7 +21,7 @@ function fresh() {
 test('doGet ตอบแค่ service ไม่มีข้อมูล', () => {
   const env = fresh();
   const r = JSON.parse(env.ctx.doGet().getContent());
-  assert.deepEqual(r, { ok: true, service: 'gymlog' });
+  assert.deepEqual(r, { ok: true, service: 'gymlog', v: 2 });
 });
 
 test('unauthorized: token ผิด/ไม่มี/ไม่ตั้งค่า → ไม่คืนข้อมูล', () => {

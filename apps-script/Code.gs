@@ -34,7 +34,7 @@ var OP_TTL = 6 * 60 * 60; // วินาที — เก็บ opId กัน�
 /* ---------- entry points ---------- */
 
 function doGet() {
-  return json_({ ok: true, service: 'gymlog' });
+  return json_({ ok: true, service: 'gymlog', v: 2 }); // v ใช้เช็กว่า deploy โค้ดเวอร์ชันล่าสุดแล้ว (ไม่มีข้อมูลใด ๆ)
 }
 
 function doPost(e) {
@@ -161,7 +161,8 @@ function login_(idToken) {
   cache.put('login-tries', String(tries + 1), 600);
 
   var info = verifyIdToken_(idToken, clientId);
-  var allowed = String(props.getProperty('ALLOWED_EMAIL') || Session.getEffectiveUser().getEmail()).toLowerCase();
+  var allowed = String(props.getProperty('ALLOWED_EMAIL') || Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  if (!allowed) throw new Error('misconfigured: ALLOWED_EMAIL ว่าง'); // ไม่ปล่อยให้เทียบกับค่าว่าง
   if (String(info.email).toLowerCase() !== allowed) throw new Error('unauthorized');
 
   var token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
@@ -189,8 +190,11 @@ function loginAction_(args) {
     return { ok: true, data: data };
   } catch (err) {
     var m = String((err && err.message) || err);
-    // ไม่บอกรายละเอียดว่าผิดตรงไหน (ยกเว้นยังไม่ตั้งค่า/ลองถี่เกินไป)
-    return { ok: false, error: m === 'not-configured' || m === 'too-many-attempts' ? m : 'unauthorized' };
+    // ไม่บอกรายละเอียดว่าผิดตรงไหน (ยกเว้นยังไม่ตั้งค่า/ลองถี่เกินไป); ข้อผิดพลาดของระบบเอง (เช่น ไม่มีสิทธิ์ UrlFetch)
+    // ตอบ login-error และบันทึกสาเหตุไว้ในหน้า Executions ของ Apps Script (เห็นเฉพาะเจ้าของ)
+    if (m === 'not-configured' || m === 'too-many-attempts' || m === 'unauthorized') return { ok: false, error: m };
+    console.error('login failed: ' + m);
+    return { ok: false, error: 'login-error' };
   }
 }
 

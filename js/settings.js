@@ -45,6 +45,7 @@ export function renderSettings(app, first = false) {
     } catch (e) {
       const m = e.code === 'server' && e.message === 'too-many-attempts' ? 'ลองถี่เกินไป รอประมาณ 10 นาทีแล้วลองใหม่'
         : e.code === 'server' && e.message === 'not-configured' ? 'ฝั่งเซิร์ฟเวอร์ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID'
+        : e.code === 'server' && e.message === 'login-error' ? 'เซิร์ฟเวอร์ขัดข้องตอนตรวจบัญชี (ดูสาเหตุที่ Apps Script → Executions)'
         : LOGIN_ERR[e.code] || 'เข้าสู่ระบบไม่สำเร็จ';
       setRes('err', m);
     }

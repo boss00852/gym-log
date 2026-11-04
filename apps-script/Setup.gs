@@ -10,6 +10,7 @@
  */
 var OLD_BOOK_ID = 'PASTE_OLD_BOOK_ID_HERE';
 var GOOGLE_CLIENT_ID_SETUP = 'PASTE_GOOGLE_CLIENT_ID_HERE';
+var ALLOWED_EMAIL_SETUP = 'PASTE_ALLOWED_EMAIL_HERE'; // บัญชี Google เดียวที่ล็อกอินได้ (ไม่ใส่ = ใช้อีเมลเจ้าของสคริปต์)
 
 function setup() {
   var props = PropertiesService.getScriptProperties();
@@ -28,8 +29,9 @@ function setup() {
   } else {
     report.push('ยังไม่ได้ใส่ GOOGLE_CLIENT_ID (ยังเข้าสู่ระบบด้วย Google ไม่ได้ — ใช้ API token แทนได้)');
   }
-  props.setProperty('ALLOWED_EMAIL', props.getProperty('ALLOWED_EMAIL') || Session.getEffectiveUser().getEmail());
-  report.push('อนุญาตเฉพาะบัญชี: ' + props.getProperty('ALLOWED_EMAIL'));
+  var allowed = ALLOWED_EMAIL_SETUP.indexOf('PASTE_') !== 0 ? ALLOWED_EMAIL_SETUP : props.getProperty('ALLOWED_EMAIL') || Session.getEffectiveUser().getEmail() || '';
+  if (allowed) props.setProperty('ALLOWED_EMAIL', allowed);
+  report.push(allowed ? 'อนุญาตเฉพาะบัญชี: ' + allowed : 'ยังหาอีเมลเจ้าของไม่ได้ — ใส่ ALLOWED_EMAIL เองใน Script Properties');
 
   var token = props.getProperty('API_TOKEN');
   var created = false;

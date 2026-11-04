@@ -148,7 +148,7 @@ test('login ไม่ทำให้ doGet / ข้อมูลรั่ว: ต
   env.idTokens[JWT] = good({ email: 'x@y.z' });
   const b = login(env);
   assert.deepEqual(a, b);
-  assert.deepEqual(JSON.parse(env.ctx.doGet().getContent()), { ok: true, service: 'gymlog' });
+  assert.deepEqual(JSON.parse(env.ctx.doGet().getContent()), { ok: true, service: 'gymlog', v: 2 });
 });
 
 test('setup: ตั้ง GOOGLE_CLIENT_ID + ALLOWED_EMAIL + ขอสิทธิ์ UrlFetch และไม่สุ่ม API_TOKEN เมื่อใช้ Google', () => {
@@ -161,4 +161,31 @@ test('setup: ตั้ง GOOGLE_CLIENT_ID + ALLOWED_EMAIL + ขอสิทธ�
   assert.equal(env.props.API_TOKEN, undefined);
   assert.equal(env.fetched.length, 1);
   assert.ok(r.report.some((x) => /ได้สิทธิ์ UrlFetch/.test(x)));
+});
+
+test('ข้อผิดพลาดของระบบ (เช่น ไม่มีสิทธิ์ UrlFetch) ตอบ login-error ไม่ใช่ unauthorized และไม่หลุดรายละเอียด', () => {
+  const env = setup();
+  const orig = env.ctx.UrlFetchApp.fetch;
+  env.ctx.UrlFetchApp.fetch = () => { throw new Error('You do not have permission to call UrlFetchApp.fetch'); };
+  const r = login(env);
+  assert.deepEqual(r, { ok: false, error: 'login-error' });
+  env.ctx.UrlFetchApp.fetch = orig;
+});
+
+test('ALLOWED_EMAIL ว่าง + หาอีเมลเจ้าของไม่ได้ = ปฏิเสธ (login-error) ไม่เทียบกับค่าว่าง', () => {
+  const env = setup();
+  env.owner.email = '';
+  env.idTokens[JWT] = good({ email: '' });
+  assert.notEqual(login(env).ok, true);
+  env.cache['login-tries'] = '0';
+  env.idTokens[JWT] = good();
+  assert.deepEqual(login(env), { ok: false, error: 'login-error' });
+});
+
+test('setup: ALLOWED_EMAIL_SETUP จากไฟล์รวมมีผลเหนืออีเมลเจ้าของสคริปต์', () => {
+  const env = createEnv({ token: null });
+  env.ctx.ALLOWED_EMAIL_SETUP = 'me@example.test';
+  env.owner.email = '';
+  env.ctx.setup();
+  assert.equal(env.props.ALLOWED_EMAIL, 'me@example.test');
 });
