@@ -10,9 +10,11 @@ function openModal(app, { tall = false } = {}) {
   const close = () => {
     if (onClose) onClose();
     modal.remove();
+    if (!doc.querySelector('.modal')) doc.documentElement.classList.remove('modal-open'); // ปิดแผ่นสุดท้าย → ปลดล็อกการเลื่อนหน้า
   };
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
   doc.body.appendChild(modal);
+  doc.documentElement.classList.add('modal-open'); // หน้าด้านหลังเลื่อนไม่ได้ขณะเปิดแผ่น (กันเลื่อนรายการสุดทางแล้วดันหน้าขึ้น)
   return { sheet, modal, close, onClose: (f) => { onClose = f; } };
 }
 
@@ -93,7 +95,7 @@ export function openGymPicker(app, { onPick }) {
   const s = m.sheet;
   const cur = app.cur;
   const q = h('input', { class: 'srch', id: 'gymq', type: 'text', placeholder: 'ค้นหา หรือพิมพ์ชื่อสถานที่ใหม่', autocomplete: 'off' });
-  const res = h('div', { style: 'overflow:auto;flex:0 1 auto;min-height:0' });
+  const res = h('div', { class: 'slist', style: 'overflow:auto;flex:0 1 auto;min-height:0' });
   s.style.display = 'flex';
   s.style.flexDirection = 'column';
   s.appendChild(h('h2', { text: 'สถานที่' }));
@@ -152,7 +154,7 @@ export function openAddSheet(app) {
     sheet.style.flexDirection = 'column';
     sheet.appendChild(h('h2', { text: kind === 'cardio' ? 'คาร์ดิโอ' : 'ท่าเวท' }));
     const q = h('input', { class: 'srch', id: 'exq', type: 'text', placeholder: 'ค้นหา หรือพิมพ์ชื่อท่าใหม่', autocomplete: 'off' });
-    const res = h('div', { style: 'overflow:auto;flex:1;min-height:0' });
+    const res = h('div', { class: 'slist', style: 'overflow:auto;flex:1;min-height:0' });
     sheet.appendChild(q);
     sheet.appendChild(res);
     const render = () => {

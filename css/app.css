@@ -99,6 +99,9 @@ h1{margin:0;font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.2}
 .modal{position:fixed;left:0;right:0;bottom:0;top:58px;z-index:20;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6)}
 .sheet{position:relative;background:var(--card);width:100%;max-width:520px;max-height:calc(100% - var(--kb));border-radius:20px 20px 0 0;padding:18px 18px calc(28px + env(safe-area-inset-bottom));overflow:auto;margin-bottom:var(--kb)}
 .sheet h2{margin:0 0 12px;font-size:20px}
+/* ไม่ให้การเลื่อนส่งต่อไปหน้าด้านหลัง (scroll chaining) และล็อกหน้าขณะเปิดแผ่น */
+.sheet,.slist,.modal{overscroll-behavior:contain}
+html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
 /* คีย์บอร์ดเปิด (--kb) → ลดความสูงแผ่นให้พอดีพื้นที่เหนือคีย์บอร์ด หัวแผ่นและช่องค้นหาจะไม่ล้นขึ้นไปเหนือจอ */
 .sheet.tall{height:calc(100% - max(100px, var(--kb)))}
 .types{display:grid;grid-template-columns:1fr 1fr;gap:10px}

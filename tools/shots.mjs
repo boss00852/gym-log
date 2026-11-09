@@ -240,6 +240,31 @@ extra['13-gym-keyboard'] = async () => {
   await sheetKeyboardCheck(p, '#gymq', 400, 'gym picker+keyboard');
   return p;
 };
+// เลื่อนรายการในแผ่นล่างจนสุดแล้วเลื่อนต่อ: หน้าด้านหลังต้องไม่ขยับ (scroll chaining ทำให้แถบบนเลื่อนหายไป)
+extra['14-sheet-scroll-chain'] = async () => {
+  const p = await newPage();
+  // ทำให้หน้าด้านหลังเลื่อนได้ (เซสชันยาว) เหมือนตอนจดไปหลายท่า
+  await openSession(p, [['Inclined bench press'], ['Lateral raise'], ['Seated cable row with close-grip neutral handle'], ['Pec deck fly'], ['Cable pec fly']]);
+  await p.evaluate(() => window.scrollTo(0, 0));
+  await p.click('#addbtn');
+  await p.click('.ty[data-kind="strength"]');
+  await p.evaluate(() => {
+    document.documentElement.style.setProperty('--kb', '400px');
+    // รายการยาวพอให้เลื่อนได้
+    const l = document.querySelector('.sheet .slist, .sheet div[style*="overflow"]');
+    for (let i = 0; i < 40; i++) { const b = document.createElement('button'); b.className = 'opt'; b.textContent = 'ท่าทดสอบ ' + i; l.appendChild(b); }
+  });
+  const y0 = await p.evaluate(() => window.scrollY);
+  const box = await p.evaluate(() => { const r = document.querySelector('.sheet .slist, .sheet div[style*="overflow"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.move(box.x, box.y);
+  for (let i = 0; i < 25; i++) { await p.mouse.wheel(0, 400); await p.waitForTimeout(20); }
+  await p.waitForTimeout(300);
+  const r = await p.evaluate(() => ({ pageY: window.scrollY, listAtBottom: (() => { const l = document.querySelector('.sheet .slist, .sheet div[style*="overflow"]'); return Math.round(l.scrollTop + l.clientHeight) >= l.scrollHeight - 2; })(), docOverflow: getComputedStyle(document.documentElement).overflow }));
+  console.log('scroll chain', JSON.stringify({ before: y0, ...r }));
+  if (!r.listAtBottom) throw new Error('รายการยังเลื่อนไม่สุด (ตั้งค่าทดสอบผิด)');
+  if (r.pageY !== y0) throw new Error('หน้าด้านหลังถูกดันเลื่อนตอนเลื่อนรายการสุดทาง: ' + y0 + ' → ' + r.pageY);
+  return p;
+};
 for (const [name, build] of Object.entries(extra)) {
   if (process.argv[2] && !name.startsWith(process.argv[2])) continue;
   const page = await build();

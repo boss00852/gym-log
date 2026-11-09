@@ -336,3 +336,38 @@ test('หน้าตั้งค่า: ช่องที่อยู่ใต
   t.app.ensureFieldVisible(fake);
   assert.deepEqual(calls, []);
 });
+
+/* ---------- แผ่นล่าง: ไม่ให้หน้าด้านหลังเลื่อนตาม ---------- */
+test('เปิดแผ่นล่างแล้วล็อกการเลื่อนหน้าด้านหลัง ปิดแผ่นสุดท้ายจึงปลดล็อก (รวมกรณีแผ่นซ้อนแผ่น)', async () => {
+  const t = setup({ seed: 2 });
+  t.app.start();
+  await waitFor(() => t.app.data.gyms.length > 0);
+  t.click(t.$('.cta'));
+  const root = t.doc.documentElement;
+  assert.ok(!root.classList.contains('modal-open'));
+  t.click(t.$('[data-chip="gym"]')); // แผ่นแก้วัน/เวลา/สถานที่
+  assert.ok(root.classList.contains('modal-open'));
+  t.click(t.$('#f-gym')); // แผ่นเลือกสถานที่ซ้อนขึ้นมา
+  assert.equal(t.$$('.modal').length, 2);
+  t.click(t.$('.opt[data-gym]')); // เลือกแล้วแผ่นที่สองปิด แผ่นแรกยังเปิดอยู่
+  assert.equal(t.$$('.modal').length, 1);
+  assert.ok(root.classList.contains('modal-open'), 'ยังมีแผ่นเปิดอยู่ ต้องยังล็อก');
+  t.click(t.$('.modal')); // แตะนอกแผ่นเพื่อปิดแผ่นสุดท้าย
+  assert.equal(t.$$('.modal').length, 0);
+  assert.ok(!root.classList.contains('modal-open'));
+});
+
+test('เลือกท่า (แผ่นเพิ่มท่า) แล้วปลดล็อกการเลื่อนหน้า', async () => {
+  const t = setup();
+  await startSession(t);
+  await addExerciseUI(t, 'Bench press');
+  assert.ok(!t.doc.documentElement.classList.contains('modal-open'));
+});
+
+test('CSS: กัน scroll chaining ที่แผ่น/รายการ และล็อกหน้าเมื่อ modal-open', () => {
+  const css = fs.readFileSync(new URL('../../css/app.css', import.meta.url), 'utf8');
+  assert.match(css, /\.sheet,\.slist,\.modal\{overscroll-behavior:contain\}/);
+  assert.match(css, /html\.modal-open,html\.modal-open body\{overflow:hidden/);
+  const src = fs.readFileSync(new URL('../../js/sheets.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/class: 'slist'/g) || []).length, 2, 'รายการเลื่อนได้ในแผ่นเลือกท่า/สถานที่ใช้คลาส slist');
+});
