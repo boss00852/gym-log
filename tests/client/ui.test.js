@@ -270,3 +270,34 @@ test('โฟกัสช่องกรอกจริง → เรียกจ
   await new Promise((r) => setTimeout(r, 700));
   assert.equal(seen.length, 0);
 });
+
+/* ---------- อัปเดตแอป ---------- */
+test('หน้าตั้งค่า: แสดงเวอร์ชัน และปุ่มอัปเดตล้างแคช/ยกเลิก service worker แล้วรีโหลด โดยไม่ลบข้อมูล/การล็อกอิน', async () => {
+  const t = setup({ seed: 1 });
+  await boot(t);
+  t.click(t.$('.link'));
+  assert.match(t.$('#s-vtext').textContent, /เวอร์ชันแอป \d{4}-\d{2}-\d{2}\.\d+/);
+  const log = [];
+  t.win.caches = { keys: async () => ['gymlog-shell-v3', 'old'], delete: async (k) => { log.push('del ' + k); return true; } };
+  t.win.navigator.serviceWorker = { getRegistrations: async () => [{ unregister: async () => { log.push('unregister'); } }] };
+  t.app.reloadPage = () => log.push('reload');
+  t.click(t.$('#s-refresh'));
+  await waitFor(() => log.includes('reload'));
+  assert.deepEqual(log, ['unregister', 'del gymlog-shell-v3', 'del old', 'reload']);
+  assert.equal(t.storage.get('gl_token'), 'secret-token', 'การล็อกอินยังอยู่');
+  assert.ok(t.storage.get('gl_boot'), 'ข้อมูลในเครื่องยังอยู่');
+});
+
+test('มีเวอร์ชันใหม่ระหว่างจดอยู่ → รอจนกลับหน้าแรกแล้วรีโหลด (ไม่รีโหลดกลางการกรอก)', async () => {
+  const t = setup();
+  await boot(t);
+  let reloads = 0;
+  t.app.reloadPage = () => { reloads++; };
+  t.click(t.$('.cta'));
+  t.app.pendingReload = true;
+  await addExerciseUI(t, 'Bench press');
+  assert.equal(reloads, 0);
+  t.click(t.$('.bk'));
+  assert.equal(reloads, 1);
+  assert.equal(t.app.pendingReload, false);
+});

@@ -33,6 +33,7 @@ export function createApp({ win, api, storage, opts = {} }) {
   app.q = createQueue({ api, storage, retryMs: opts.retryMs ?? 8000, onChange: () => app.updateBadge() });
 
   app.persist = () => storage.set('gl_boot', app.data);
+  app.reloadPage = () => win.location.reload(); // แยกเป็นฟังก์ชันไว้ให้ทดสอบ
   app.status = () => (app.authBad ? { state: 'auth', n: app.q.length } : app.q.status());
 
   /* ---------- สถานะซิงก์ ---------- */

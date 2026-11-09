@@ -44,6 +44,11 @@ function sessionCard(app, s) {
 
 export function renderHome(app) {
   const { h, doc, data } = app;
+  if (app.pendingReload) { // มีเวอร์ชันใหม่รออยู่ (ตอนอยู่หน้าบันทึกเลยยังไม่ได้รีโหลด) → รีโหลดตอนนี้
+    app.pendingReload = false;
+    app.reloadPage();
+    return;
+  }
   app.view = 'home';
   app.refreshChips = null;
   if (app.stopTick) app.stopTick();

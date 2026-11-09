@@ -1,6 +1,7 @@
 import { svg } from './util.js';
 import { validApiUrl } from './api.js';
 import { loadGsi } from './gsi.js';
+import { APP_VERSION } from './version.js';
 
 const LOGIN_ERR = {
   unauthorized: 'บัญชี Google นี้ไม่ได้รับอนุญาต (ต้องเป็นบัญชีเจ้าของข้อมูลเท่านั้น)',
@@ -92,6 +93,19 @@ export function renderSettings(app, first = false) {
     done();
   }
 
+  // ล้างแคชของแอป (ไม่ล้างข้อมูลที่บันทึกไว้/การล็อกอิน) แล้วโหลดไฟล์ล่าสุดจากเซิร์ฟเวอร์
+  async function hardRefresh() {
+    setRes('', 'กำลังล้างแคชแอป…');
+    try {
+      const sw = win.navigator && win.navigator.serviceWorker;
+      const regs = sw && sw.getRegistrations ? await sw.getRegistrations() : [];
+      await Promise.all(regs.map((r) => r.unregister()));
+      const keys = win.caches ? await win.caches.keys() : [];
+      await Promise.all(keys.map((k) => win.caches.delete(k)));
+    } catch (e) {}
+    app.reloadPage();
+  }
+
   function logout() {
     api.logout();
     app.authBad = true;
@@ -126,6 +140,10 @@ export function renderSettings(app, first = false) {
     parts.push(res);
     parts.push(tokenBox);
   }
+  parts.push(h('div', { class: 'adv', id: 's-ver' }, [
+    h('div', { class: 'note2', id: 's-vtext', text: 'เวอร์ชันแอป ' + APP_VERSION }),
+    h('button', { class: 'btn ghost', type: 'button', id: 's-refresh', text: 'อัปเดตแอปเป็นเวอร์ชันล่าสุด', onclick: hardRefresh })
+  ]));
   root.appendChild(h('div', { class: 'set' }, parts));
   mountGoogle();
 }
