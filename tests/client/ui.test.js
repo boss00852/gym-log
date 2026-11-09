@@ -301,3 +301,38 @@ test('มีเวอร์ชันใหม่ระหว่างจดอ�
   assert.equal(reloads, 1);
   assert.equal(t.app.pendingReload, false);
 });
+
+/* ---------- คีย์บอร์ดกับแผ่นล่าง/หน้าตั้งค่า ---------- */
+test('CSS: แผ่นล่างลดความสูงตามคีย์บอร์ด (--kb) จึงไม่ล้นขึ้นเหนือจอ (บั๊กที่ช่องค้นหาท่าหาย)', () => {
+  const css = fs.readFileSync(new URL('../../css/app.css', import.meta.url), 'utf8');
+  assert.match(css, /\.sheet\{[^}]*max-height:calc\(100% - var\(--kb\)\)/);
+  assert.match(css, /\.sheet\.tall\{height:calc\(100% - max\(100px, var\(--kb\)\)\)\}/);
+  assert.match(css, /\.set\{padding:0 20px calc\(40px \+ var\(--kb\)\)\}/);
+});
+
+test('หน้าตั้งค่า: ช่องที่อยู่ใต้คีย์บอร์ดถูกเลื่อนขึ้นมา; ช่องในแผ่นล่างและการ์ดท่าไม่ถูกจัดการซ้ำ', async () => {
+  const t = setup({ noConfig: true });
+  t.app.start();
+  await waitFor(() => t.$('#s-token'));
+  const calls = [];
+  t.win.scrollBy = (o) => calls.push(o);
+  t.win.visualViewport = { height: 400, offsetTop: 0, addEventListener() {} };
+  t.$('.stk').getBoundingClientRect = () => ({ top: 0, bottom: 58 });
+  const tok = t.$('#s-token');
+  tok.getBoundingClientRect = () => ({ top: 380, bottom: 430 });
+  tok.dispatchEvent(new t.win.Event('focusin', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(calls.length >= 1);
+  assert.equal(calls[0].top, 430 - (400 - 12)); // ล่างช่อง 430 → ขอบล่างที่เห็น 400 − เผื่อ 12 → เลื่อน 42
+  // ช่องในการ์ดท่า/แผ่นล่าง: ฟังก์ชันทั่วไปต้องข้าม
+  calls.length = 0;
+  const fake = t.doc.createElement('input');
+  fake.className = 'c';
+  const ex = t.doc.createElement('div');
+  ex.className = 'ex';
+  ex.appendChild(fake);
+  t.doc.body.appendChild(ex);
+  fake.getBoundingClientRect = () => ({ top: 900, bottom: 950 });
+  t.app.ensureFieldVisible(fake);
+  assert.deepEqual(calls, []);
+});

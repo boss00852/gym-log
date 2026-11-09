@@ -7,6 +7,7 @@ import { seedGymColors, bumpGym } from './gyms.js';
 import { renderHome } from './home.js';
 import { renderSession } from './session.js';
 import { renderSettings } from './settings.js';
+import { scrollDelta } from './viewport.js';
 
 const BADGE_TEXT = { idle: 'บันทึกแล้ว', pending: 'กำลังบันทึก…', offline: 'ออฟไลน์ · รอซิงค์', auth: 'ต้องตั้งค่า token' };
 const defaults = () => ({ exercises: [], gyms: [], lastGym: '', sessions: [], total: 0, srvCount: 0, logUrl: '' });
@@ -34,6 +35,16 @@ export function createApp({ win, api, storage, opts = {} }) {
 
   app.persist = () => storage.set('gl_boot', app.data);
   app.reloadPage = () => win.location.reload(); // แยกเป็นฟังก์ชันไว้ให้ทดสอบ
+
+  // ช่องกรอกทั่วไป (เช่น หน้าตั้งค่า) ต้องไม่ถูกคีย์บอร์ดบัง — การ์ดท่าและแผ่นล่างมีตัวจัดการของตัวเองแล้ว
+  app.ensureFieldVisible = (el) => {
+    if (!el || !el.getBoundingClientRect || !el.closest || el.closest('.modal, .ex')) return;
+    const vv = win.visualViewport;
+    const bottom = vv ? vv.offsetTop + vv.height : win.innerHeight;
+    const stk = doc.querySelector('.stk');
+    const d = scrollDelta(el.getBoundingClientRect(), stk ? stk.getBoundingClientRect().bottom : 0, bottom);
+    if (d) win.scrollBy({ top: d, behavior: 'smooth' });
+  };
   app.status = () => (app.authBad ? { state: 'auth', n: app.q.length } : app.q.status());
 
   /* ---------- สถานะซิงก์ ---------- */
@@ -253,6 +264,10 @@ export function createApp({ win, api, storage, opts = {} }) {
 
   /* ---------- เริ่มต้น ---------- */
   app.start = () => {
+    doc.addEventListener('focusin', (e) => {
+      if (!/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) return;
+      [0, 250, 600].forEach((ms) => win.setTimeout(() => doc.contains(e.target) && app.ensureFieldVisible(e.target), ms)); // รอคีย์บอร์ดเลื่อนขึ้น
+    });
     win.addEventListener('online', () => app.q.setOnline(true));
     win.addEventListener('offline', () => app.q.setOnline(false));
     win.addEventListener('pagehide', app.flushSaves);
@@ -266,6 +281,7 @@ export function createApp({ win, api, storage, opts = {} }) {
         const kb = Math.max(0, Math.round(win.innerHeight - vv.height - vv.offsetTop));
         doc.documentElement.style.setProperty('--kb', kb + 'px');
         if (app.view === 'session' && app.activeVisible) app.activeVisible(); // คีย์บอร์ดเพิ่งเด้ง/หุบ → จัดตำแหน่งช่องที่กรอกใหม่
+        else if (app.view === 'settings') app.ensureFieldVisible(doc.activeElement);
       };
       vv.addEventListener('resize', sync);
       vv.addEventListener('scroll', sync);

@@ -203,6 +203,43 @@ const extra = {
     return p;
   }
 };
+// แผ่นล่างที่มีช่องกรอก ต้องไม่ล้นขึ้นไปเหนือจอเมื่อคีย์บอร์ดเปิด (จำลองด้วย --kb ตามที่แอปคำนวณจาก visualViewport)
+async function sheetKeyboardCheck(p, focusSel, kb, label) {
+  await p.evaluate((kb) => document.documentElement.style.setProperty('--kb', kb + 'px'), kb);
+  await p.focus(focusSel);
+  await p.waitForTimeout(400);
+  const r = await p.evaluate(({ sel, kb }) => {
+    const el = document.querySelector(sel).getBoundingClientRect();
+    const sheet = document.querySelector('.sheet').getBoundingClientRect();
+    const modal = document.querySelector('.modal').getBoundingClientRect();
+    return { inputTop: Math.round(el.top), inputBottom: Math.round(el.bottom), sheetTop: Math.round(sheet.top), sheetBottom: Math.round(sheet.bottom), modalTop: Math.round(modal.top), visibleBottom: window.innerHeight - kb };
+  }, { sel: focusSel, kb });
+  console.log(label, JSON.stringify(r));
+  if (!(r.sheetTop >= r.modalTop - 1 && r.inputTop >= r.modalTop && r.sheetBottom <= r.visibleBottom + 1 && r.inputBottom <= r.visibleBottom)) throw new Error(label + ': ช่องกรอก/แผ่นล้นออกนอกพื้นที่ที่เห็น ' + JSON.stringify(r));
+}
+extra['11-picker-keyboard'] = async () => {
+  const p = await newPage();
+  await openSession(p, [['Inclined bench press']]);
+  await p.click('#addbtn');
+  await p.click('.ty[data-kind="strength"]');
+  await sheetKeyboardCheck(p, '#exq', 400, 'picker+keyboard');
+  return p;
+};
+extra['12-meta-keyboard'] = async () => {
+  const p = await newPage();
+  await openSession(p, [['Inclined bench press']]);
+  await p.click('[data-chip="date"]');
+  await sheetKeyboardCheck(p, '#f-date', 400, 'meta+keyboard');
+  return p;
+};
+extra['13-gym-keyboard'] = async () => {
+  const p = await newPage();
+  await openSession(p, [['Inclined bench press']]);
+  await p.click('[data-chip="gym"]');
+  await p.click('#f-gym');
+  await sheetKeyboardCheck(p, '#gymq', 400, 'gym picker+keyboard');
+  return p;
+};
 for (const [name, build] of Object.entries(extra)) {
   if (process.argv[2] && !name.startsWith(process.argv[2])) continue;
   const page = await build();
@@ -215,7 +252,7 @@ for (const [name, build] of Object.entries(extra)) {
 const only = process.argv[2];
 for (const [name, build] of Object.entries(screens)) {
   if (only && !name.startsWith(only)) continue;
-  if (only && /^(09|10)/.test(only)) continue;
+  if (only && /^(09|1\d)/.test(only)) continue;
   const page = await build();
   await page.waitForTimeout(1400); // รอแอนิเมชันไฮไลต์การ์ดจบ
   await page.screenshot({ path: path.join(outDir, name + '.app.png') });
