@@ -22,7 +22,11 @@ var HEAD = ['UpdatedAt', 'SessionId', 'Date', 'Time', 'Place', 'Exercise', 'Kind
 var EX_HEAD = ['Exercise', 'Description', 'Kind', 'Rest'];
 var PLACE_HEAD = ['Place', 'Color', 'Note'];
 var PALETTE = ['#C8F169', '#7CC4F5', '#F5B461', '#C9A7F5', '#6FD3C0', '#F5A3C7', '#F28B82'];
-var CARDIO_RE = /treadmill|elliptical|swim|cycl|bike|run|walk|rowing|stair/i;
+// เดาหมวดจากชื่อ (ใช้เมื่อคอลัมน์ Kind ว่างเท่านั้น) — ต้องขึ้นต้นคำ: "run" ใน "crunch" / "cycl" ใน "bicycle crunch" ไม่นับ
+var CARDIO_RE = /\b(treadmill|elliptical|swim|cycl|bike|biking|run|walk|rowing|stair)/i;
+function guessKind_(name) {
+  return CARDIO_RE.test(name) && !/lunge|crunch/i.test(name) ? 'cardio' : 'strength'; // walking lunge / ท่า crunch เป็นเวท
+}
 var SMALL_RE = /curl|raise|pushdown|push down|extension|fly|crunch|calf|kickback|shrug|face pull|pec deck|rear delt|wrist/i;
 var PAGE_DEFAULT = 10;
 var PAGE_MAX = 50;
@@ -352,7 +356,7 @@ function readExercises_(usage) {
     if (seen[k]) return;
     seen[k] = 1;
     var c = String(r[2] || '').toLowerCase();
-    var kind = c === 'cardio' ? 'cardio' : c === 'strength' ? 'strength' : CARDIO_RE.test(nm) ? 'cardio' : 'strength';
+    var kind = c === 'cardio' ? 'cardio' : c === 'strength' ? 'strength' : guessKind_(nm);
     out.push({ name: nm, desc: String(r[1] || '').trim(), kind: kind, rest: String(r[3] || '').trim(), n: usage[k] || 0 });
   });
   out.sort(function (a, b) {

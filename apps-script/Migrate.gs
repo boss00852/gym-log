@@ -161,7 +161,7 @@ function importOldExercises_(old, report) {
     if (seen[k]) return;
     seen[k] = 1;
     var c = String(r[2] || '').toLowerCase();
-    var kind = c === 'cardio' ? 'cardio' : c === 'strength' ? 'strength' : CARDIO_RE.test(nm) ? 'cardio' : 'strength';
+    var kind = c === 'cardio' ? 'cardio' : c === 'strength' ? 'strength' : guessKind_(nm);
     out.push([nm, String(r[1] || '').trim(), kind, defaultRest_(nm, kind)]);
   });
   if (out.length) {

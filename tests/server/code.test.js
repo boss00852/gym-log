@@ -257,3 +257,22 @@ test('ตอบเป็น JSON mime และ error ไม่หลุด stac
   assert.equal(r.ok, false);
   assert.ok(!/\n\s+at /.test(r.error));
 });
+
+test('เดาหมวดจากชื่อ (Kind ว่าง): Crunch / Machine Crunch / Bicycle crunch เป็นเวท ไม่ใช่คาร์ดิโอ (บั๊ก "run" ใน "crunch")', () => {
+  const env = createEnv();
+  const names = {
+    Crunch: 'strength', 'Machine Crunch': 'strength', 'Bicycle crunch': 'strength', 'Cable crunch': 'strength', 'Walking lunge': 'strength', 'Trunk rotation': 'strength',
+    Treadmill: 'cardio', 'Running': 'cardio', 'Run intervals': 'cardio', 'Stationary bike': 'cardio', Cycling: 'cardio', 'Stair climber': 'cardio', 'Rowing machine': 'cardio', Swimming: 'cardio', 'Walking': 'cardio', 'Elliptical machine': 'cardio',
+    'Low Row': 'strength', 'Seated cable row': 'strength'
+  };
+  env.addSheet('Exercises', [['Exercise', 'Description', 'Kind', 'Rest'], ...Object.keys(names).map((n) => [n, '', '', ''])]);
+  const got = Object.fromEntries(env.call('bootstrap').data.exercises.map((e) => [e.name, e.kind]));
+  assert.deepEqual(got, names);
+});
+
+test('คอลัมน์ Kind ในชีตมีผลเหนือการเดาจากชื่อเสมอ', () => {
+  const env = createEnv();
+  env.addSheet('Exercises', [['Exercise', 'Description', 'Kind', 'Rest'], ['Crunch', '', 'strength', ''], ['Mystery', '', 'cardio', '']]);
+  const got = Object.fromEntries(env.call('bootstrap').data.exercises.map((e) => [e.name, e.kind]));
+  assert.deepEqual(got, { Crunch: 'strength', Mystery: 'cardio' });
+});
