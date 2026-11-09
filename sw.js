@@ -1,12 +1,12 @@
 // Service worker: แคช app shell (ไฟล์สถิตของโดเมนเราเท่านั้น)
 // - ไฟล์สถิต: cache-first (เปิดเร็ว/ออฟไลน์ได้) แล้วอัปเดตเบื้องหลังเพื่อให้ได้เวอร์ชันใหม่ในการเปิดครั้งถัดไป
 // - ห้ามแคช API: ทุกคำขอข้ามโดเมน (script.google.com ฯลฯ) และทุกคำขอที่ไม่ใช่ GET ไม่ผ่าน SW เลย
-const CACHE = 'gymlog-shell-v2'; // เพิ่มเลขเวอร์ชันเมื่อต้องการบังคับล้างแคชเก่า
+const CACHE = 'gymlog-shell-v3'; // เพิ่มเลขเวอร์ชันเมื่อต้องการบังคับล้างแคชเก่า
 const SHELL = [
   './', 'index.html', 'config.js', 'manifest.webmanifest',
   'css/app.css',
   'js/main.js', 'js/app.js', 'js/api.js', 'js/queue.js', 'js/store.js', 'js/util.js', 'js/date.js',
-  'js/stats.js', 'js/timer.js', 'js/gyms.js', 'js/home.js', 'js/session.js', 'js/sheets.js', 'js/settings.js', 'js/gsi.js',
+  'js/stats.js', 'js/timer.js', 'js/gyms.js', 'js/home.js', 'js/session.js', 'js/sheets.js', 'js/settings.js', 'js/gsi.js', 'js/viewport.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
 

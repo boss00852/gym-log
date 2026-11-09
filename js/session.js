@@ -4,6 +4,7 @@ import { gymColor } from './gyms.js';
 import { hasData, lastText, restText, summary, deltaText, dropFlags, autoWeight, setFilled } from './stats.js';
 import { openMetaSheet, openAddSheet } from './sheets.js';
 import { fmtHMS } from './timer.js';
+import { scrollDelta } from './viewport.js';
 
 const exInfo = (app, name) => app.data.exercises.find((x) => x.name.toLowerCase() === name.toLowerCase()) || {};
 const descOf = (app, name) => exInfo(app, name).desc || '';
@@ -17,7 +18,8 @@ function delBtn(app, it, card) {
   const { h } = app;
   let armed = false, t;
   const b = h('button', { class: 'del', type: 'button', text: 'ลบท่า' });
-  b.addEventListener('click', () => {
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (!armed) {
       armed = true;
       b.className = 'del arm';
@@ -41,6 +43,7 @@ function delBtn(app, it, card) {
         app.data.total = Math.max(0, app.data.total - 1);
       }
     }
+    if (app.activeIt === it) app.activeIt = null;
     app.persist();
     card.remove();
     app.afterItemsChanged();
@@ -51,10 +54,12 @@ function delBtn(app, it, card) {
 function exCard(app, it) {
   const { h, win } = app;
   const card = h('div', { class: 'ex', 'data-name': it.name });
+  card._it = it;
   const lastEl = h('div', { class: 'last', hidden: true });
   const desc = descOf(app, it.name);
   card.appendChild(h('div', { class: 'h' }, [
     h('div', {}, [
+      h('div', { class: 'noRow' }, [h('span', { class: 'no', text: 'ท่าที่ ?' }), h('span', { class: 'tapedit', text: 'แตะเพื่อแก้ไข' })]),
       h('div', { class: 'nm', text: it.name }),
       it.kind === 'cardio' ? null : lastEl,
       it.kind === 'cardio' ? null : h('div', { class: 'rest', text: restText(it.name, exInfo(app, it.name).rest) })
@@ -63,7 +68,11 @@ function exCard(app, it) {
   ]));
   if (desc) card.appendChild(h('div', { class: 'desc', text: desc }));
 
-  const onFocus = (e) => win.setTimeout(() => e.target.scrollIntoView && e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+  // การ์ดที่ย่ออยู่: แตะที่ไหนก็ได้เพื่อขยาย (ช่องกรอกในการ์ดที่ย่อไม่รับการแตะ); เลื่อนโฟกัสด้วยคีย์บอร์ดจริงก็ขยายให้
+  card.addEventListener('click', () => card.classList.contains('collapsed') && app.setActive(it, true));
+  card.addEventListener('focusin', () => card.classList.contains('collapsed') && app.setActive(it, true));
+  // ช่องที่กำลังกรอกต้องไม่ถูกคีย์บอร์ด/dock บัง: เลื่อนซ้ำหลายจังหวะระหว่างคีย์บอร์ดเลื่อนขึ้น
+  const onFocus = (e) => [0, 250, 600].forEach((ms) => win.setTimeout(() => app.doc.contains(e.target) && app.ensureVisible(card, e.target), ms));
 
   if (it.kind === 'cardio') {
     card.appendChild(h('div', { class: 'cd' }, [
@@ -192,7 +201,50 @@ export function renderSession(app) {
   const wrap = h('div', { id: 'exs' });
   root.appendChild(wrap);
   const emptyMsg = h('div', { class: 'empty', text: 'กด “+ เพิ่มท่า” เพื่อเริ่มบันทึก' });
+  /* ย่อ/ขยายการ์ด: ขยายทีละใบ (ใบที่กำลังทำ) ใบอื่นย่อเหลือชื่อ + ตารางเซ็ต */
+  app.activeIt = null;
+  const cardsEl = () => [...wrap.querySelectorAll('.ex')];
+  const renumber = () => cardsEl().forEach((c, i) => { c.querySelector('.no').textContent = 'ท่าที่ ' + (i + 1); });
+  const applyCollapse = () => cardsEl().forEach((c) => {
+    const on = c._it === app.activeIt;
+    c.classList.toggle('collapsed', !on);
+    c.setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+  const barBottom = () => { const s = doc.querySelector('.stk'); return s ? s.getBoundingClientRect().bottom : 0; };
+  app.setActive = (it, scroll) => {
+    app.activeIt = it;
+    applyCollapse();
+    if (!scroll) return;
+    // รอให้ใบอื่นย่อเสร็จก่อน แล้วค่อยเลื่อนให้ใบนี้ชิดใต้แถบบน
+    win.setTimeout(() => {
+      const c = cardsEl().find((x) => x._it === it);
+      if (c) win.scrollBy({ top: Math.round(c.getBoundingClientRect().top - (barBottom() + 8)), behavior: 'smooth' });
+    }, 0);
+  };
+  // เลื่อนหน้าให้ช่องที่กรอกอยู่มองเห็นครบ เหนือคีย์บอร์ดและ dock จับเวลา
+  app.ensureVisible = (card, target) => {
+    const vv = win.visualViewport;
+    const viewBottom = vv ? vv.offsetTop + vv.height : win.innerHeight;
+    const dk = doc.getElementById('dock');
+    const dockTop = dk && !dk.hidden ? dk.getBoundingClientRect().top : viewBottom;
+    let r = target.getBoundingClientRect();
+    if (card && target.classList.contains('c')) {
+      const g = card.querySelector('.scroll'), t = card.querySelector('.tools2'); // ตารางเซ็ต + ปุ่ม/สรุปใต้ตาราง
+      if (g && t) r = { top: g.getBoundingClientRect().top, bottom: t.getBoundingClientRect().bottom };
+    }
+    const d = scrollDelta(r, barBottom(), Math.min(viewBottom, dockTop));
+    if (d) win.scrollBy({ top: d, behavior: 'smooth' });
+  };
+  app.activeVisible = () => {
+    const el = doc.activeElement;
+    const card = el && el.closest ? el.closest('.ex') : null;
+    if (card && !card.classList.contains('collapsed')) app.ensureVisible(card, el);
+  };
+
   cur.items.forEach((it) => wrap.appendChild(exCard(app, it)));
+  app.activeIt = cur.items.length ? cur.items[cur.items.length - 1] : null; // เปิดเซสชันเดิม: ขยายใบสุดท้าย (ที่มักทำต่อ)
+  applyCollapse();
+  renumber();
   root.appendChild(h('div', { class: 'hint', 'data-hint': '1', hidden: true }));
   root.appendChild(h('button', { class: 'addbtn', type: 'button', id: 'addbtn', text: '+ เพิ่มท่า', onclick: () => openAddSheet(app) }));
 
@@ -221,25 +273,25 @@ export function renderSession(app) {
     if (items.length && emptyMsg.parentNode) emptyMsg.remove();
     dock.hidden = !!(items.length && items.every((i) => i.kind === 'cardio'));
     root.classList.toggle('nodock', dock.hidden);
+    renumber();
   };
   app.afterItemsChanged();
 
   app.addItem = (name, kind) => {
     const dup = app.cur.items.find((i) => i.name.toLowerCase() === name.toLowerCase());
-    let card;
-    if (dup) {
-      card = [...wrap.children].find((c) => c.dataset && (c.dataset.name || '').toLowerCase() === name.toLowerCase());
-    } else {
-      const it = newItem(name, kind);
+    let it = dup;
+    if (!dup) {
+      it = newItem(name, kind);
       app.cur.items.push(it);
-      card = exCard(app, it);
-      wrap.appendChild(card);
+      wrap.appendChild(exCard(app, it));
       app.afterItemsChanged();
     }
-    if (card) {
-      card.classList.add('flash');
-      card.scrollIntoView && card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    const card = cardsEl().find((c) => c._it === it);
+    // ไม่เปิดคีย์บอร์ดเอง: ปล่อยให้ผู้ใช้แตะช่องที่ต้องการกรอก
+    const ae = doc.activeElement;
+    if (ae && ae !== doc.body && ae.blur) ae.blur();
+    app.setActive(it, true);
+    if (card) card.classList.add('flash');
   };
   win.scrollTo && win.scrollTo(0, 0);
   app.updateBadge();

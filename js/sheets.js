@@ -125,8 +125,7 @@ export function openGymPicker(app, { onPick }) {
   }
   q.addEventListener('input', render);
   render();
-  win.setTimeout(() => q.focus(), 50);
-  return m;
+  return m; // ไม่โฟกัสช่องค้นหาเอง: คีย์บอร์ดปิดเป็นค่าเริ่มต้น
 }
 
 /* ---------- 06, 07: เพิ่มท่า ---------- */
@@ -169,9 +168,11 @@ export function openAddSheet(app) {
     };
     q.addEventListener('input', render);
     render();
-    win.setTimeout(() => q.focus(), 50);
+    // ไม่โฟกัสช่องค้นหาเอง (คีย์บอร์ดปิดเป็นค่าเริ่มต้น) — แตะช่องค้นหาเมื่ออยากพิมพ์
 
     function pick(name, isNew) {
+      const ae = app.doc.activeElement; // ปิดคีย์บอร์ดถ้าเปิดอยู่ (พิมพ์ค้นหามาก่อน)
+      if (ae && ae !== app.doc.body && ae.blur) ae.blur();
       m.close();
       if (isNew && !app.data.exercises.some((e) => e.name.toLowerCase() === name.toLowerCase())) {
         app.data.exercises.push({ name, desc: '', kind, n: 0 });

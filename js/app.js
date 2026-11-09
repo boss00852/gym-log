@@ -264,6 +264,7 @@ export function createApp({ win, api, storage, opts = {} }) {
       const sync = () => {
         const kb = Math.max(0, Math.round(win.innerHeight - vv.height - vv.offsetTop));
         doc.documentElement.style.setProperty('--kb', kb + 'px');
+        if (app.view === 'session' && app.activeVisible) app.activeVisible(); // คีย์บอร์ดเพิ่งเด้ง/หุบ → จัดตำแหน่งช่องที่กรอกใหม่
       };
       vv.addEventListener('resize', sync);
       vv.addEventListener('scroll', sync);

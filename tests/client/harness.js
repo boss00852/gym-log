@@ -54,6 +54,7 @@ export function setup({ token = TOKEN, serverToken = TOKEN, seed = 0, preset = {
   const win = dom.window;
   open.push(win);
   win.scrollTo = () => {};
+  win.scrollBy = () => {};
   if (google) win.google = { accounts: { id: { initialize(c) { this.cfg = c; }, renderButton(el) { el.setAttribute('data-rendered', '1'); } } } }; // Google Identity Services จำลอง
   const net = { offline: false, dropResponse: 0, calls: [], lastInit: null };
   const fetchFn = async (url, init) => {

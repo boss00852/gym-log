@@ -130,3 +130,16 @@ h1{margin:0;font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.2}
 .gbtn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px}
 .adv{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
 .adv summary{font-size:13px;color:var(--mut);cursor:pointer;padding:6px 0}
+
+/* ---------- ลำดับท่า + ย่อ/ขยายการ์ด ---------- */
+.ex .noRow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px;line-height:1.4;margin-bottom:2px}
+.ex .no{color:var(--acc);font-weight:600;letter-spacing:.2px}
+.ex .tapedit{color:var(--mut);display:none}
+/* ย่อ: เหลือเลขท่า ชื่อ (+ลบท่า) และตารางเซ็ต — ซ่อนเวลาพัก คำอธิบายท่า ฝึกล่าสุด โน้ต ปุ่ม ± Set และสรุปจำนวน Set/Reps */
+.ex.collapsed{cursor:pointer;padding-top:10px;padding-bottom:10px;background:#181D24}
+.ex.collapsed .tapedit{display:block}
+.ex.collapsed .rest,.ex.collapsed .last,.ex.collapsed .desc,.ex.collapsed .tools2,.ex.collapsed .note{display:none}
+.ex.collapsed input,.ex.collapsed textarea{pointer-events:none}
+.ex.collapsed .c{min-height:34px;font-size:15px}
+.ex.collapsed .g{margin-top:6px;gap:4px}
+.ex.collapsed .nm{font-size:16px}

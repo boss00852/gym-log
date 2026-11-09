@@ -169,9 +169,53 @@ const screens = {
   }
 };
 
+// ---- หน้าจอที่ไม่มีในดีไซน์เดิม (ฟีเจอร์ใหม่): บันทึกเฉพาะภาพของแอป ----
+const extra = {
+  '09-collapsed': async () => {
+    const p = await newPage();
+    await openSession(p, [['Inclined bench press'], ['Lateral raise'], ['Seated cable row with close-grip neutral handle']]);
+    await fill(p, 0, [13, 12, 8, 8], [38, 38, 38, 36]);
+    await fill(p, 1, [16, 13, 9, ''], [10, 10, 10, '']);
+    await p.evaluate(() => window.scrollTo(0, 0));
+    return p;
+  },
+  // จำลองคีย์บอร์ดด้วยการลดความสูงหน้าต่าง (เบราว์เซอร์เดสก์ท็อปไม่มีคีย์บอร์ดจริง): 844 → 544 (คีย์บอร์ดสูง 300)
+  '10-keyboard': async () => {
+    const p = await newPage();
+    await openSession(p, [['Inclined bench press'], ['Lateral raise']]);
+    await fill(p, 0, [13, 12, 8, 8], [38, 38, 38, 38]);
+    await p.evaluate(() => document.querySelectorAll('.ex')[1].click()); // ขยายใบที่ 2
+    await p.waitForTimeout(300);
+    await p.setViewportSize({ width: 390, height: 544 });
+    await p.focus('.ex:not(.collapsed) [data-r="1"]');
+    await p.waitForTimeout(1200);
+    const r = await p.evaluate(() => {
+      const c = document.querySelector('.ex:not(.collapsed)');
+      const dock = document.getElementById('dock').getBoundingClientRect();
+      const stk = document.querySelector('.stk').getBoundingClientRect();
+      const g = c.querySelector('.scroll').getBoundingClientRect();
+      const t = c.querySelector('.tools2').getBoundingClientRect();
+      const f = document.activeElement.getBoundingClientRect();
+      return { dockTop: Math.round(dock.top), barBottom: Math.round(stk.bottom), gridTop: Math.round(g.top), toolsBottom: Math.round(t.bottom), focusTop: Math.round(f.top), focusBottom: Math.round(f.bottom) };
+    });
+    console.log('keyboard check', JSON.stringify(r));
+    if (!(r.toolsBottom <= r.dockTop && r.focusBottom <= r.dockTop && r.focusTop >= r.barBottom)) throw new Error('ช่องกรอกถูกบัง: ' + JSON.stringify(r));
+    return p;
+  }
+};
+for (const [name, build] of Object.entries(extra)) {
+  if (process.argv[2] && !name.startsWith(process.argv[2])) continue;
+  const page = await build();
+  await page.waitForTimeout(1400);
+  await page.screenshot({ path: path.join(outDir, name + '.app.png') });
+  await page.context().close();
+  console.log('shot', name);
+}
+
 const only = process.argv[2];
 for (const [name, build] of Object.entries(screens)) {
   if (only && !name.startsWith(only)) continue;
+  if (only && /^(09|10)/.test(only)) continue;
   const page = await build();
   await page.waitForTimeout(1400); // รอแอนิเมชันไฮไลต์การ์ดจบ
   await page.screenshot({ path: path.join(outDir, name + '.app.png') });
